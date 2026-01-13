@@ -310,7 +310,7 @@ class BookingService:
                 "booking_id": booking_id,
                 "confirmation_number": confirmation_number,
                 "slot_id": slot_id,
-                "appointment_time": appointment_time.isoformat(),  # Required for Firebase queries
+                "appointment_time": appointment_time.strftime("%Y-%m-%dT%H:%M:%S"),  # Consistent ISO format for Firebase queries
                 "patient_name": patient_name,
                 "patient_phone": normalized_phone,
                 "ramq_number": ramq_number,

@@ -791,8 +791,12 @@ async def get_calendar_data(
         tz = pytz.timezone("America/Montreal")
 
     # Build appointment count by date with timezone adjustment
+    # Only count confirmed appointments (skip cancelled ones)
     appt_by_date = {}
     for appt in appointments:
+        # Skip cancelled appointments in the count
+        if appt.get("status") == "cancelled":
+            continue
         appt_time = appt.get("appointment_time")
         if appt_time:
             # Convert to local time if timezone aware, otherwise assume UTC and convert
@@ -804,9 +808,9 @@ async def get_calendar_data(
                     local_time = appt_time.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz)
                 date_key = local_time.date().isoformat()
             else:
-                 # Fallback for strings (shouldn't happen with Firestore client properly typed)
+                # Fallback for strings (shouldn't happen with Firestore client properly typed)
                 date_key = str(appt_time)[:10]
-            
+
             appt_by_date[date_key] = appt_by_date.get(date_key, 0) + 1
 
     while current_date <= end_date.date():
