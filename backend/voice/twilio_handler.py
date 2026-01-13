@@ -116,7 +116,7 @@ class TwilioMediaStreamHandler:
         self.media_buffer = []
 
         # Initialize TTS client
-        self.tts_client = GoogleTTSClient()
+        self.tts_client = GoogleTTSClient(voice_gender=self.settings.voice_gender)
 
         # Initialize conversation manager
         self.conversation = ConversationManager(

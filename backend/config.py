@@ -66,6 +66,10 @@ class Settings(BaseSettings):
         alias="CLINIC_HOURS"
     )
 
+    # Voice & Personality
+    voice_gender: str = Field(default="female", alias="VOICE_GENDER")  # 'male' or 'female'
+    emotion_level: str = Field(default="medium", alias="EMOTION_LEVEL") # 'low', 'medium', 'high'
+
     class Config:
         env_file = ".env"  # Optional .env file for local development
         env_file_encoding = "utf-8"

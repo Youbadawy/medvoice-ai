@@ -6,6 +6,9 @@
 *.key
 service-account.json
 firebase-service-account.json
+GCP_SA_KEY.json
+FIREBASE_SERVICE_ACCOUNT.json
+*-key.json
 
 # Python
 __pycache__/

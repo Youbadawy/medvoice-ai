@@ -129,6 +129,80 @@ async def get_dashboard_stats():
     )
 
 
+@router.get("/costs")
+async def get_costs(days: int = 30):
+    """
+    Get financial cost summary for the last N days.
+    """
+    try:
+        firebase = get_firebase_client()
+        calls = await firebase.get_recent_calls(limit=500) # Fetch ample history
+        
+        total_cost = 0.0
+        breakdown = {
+            "telephony": 0.0,
+            "asr": 0.0,
+            "tts": 0.0,
+            "llm": 0.0
+        }
+        
+        daily_costs = {}
+        
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+
+        for call in calls:
+            # Check date
+            created_at = call.get("created_at")
+            if not created_at:
+                continue
+                
+            # If string, parse it. Firestore client usually returns datetime though.
+            if isinstance(created_at, str):
+                try:
+                    created_at_dt = datetime.fromisoformat(created_at)
+                except ValueError:
+                    continue
+            else:
+                created_at_dt = created_at
+
+            if created_at_dt < start_date:
+                continue
+
+            cost_data = call.get("cost_data", {})
+            if not cost_data:
+                continue
+                
+            c_total = cost_data.get("total_cost", 0.0)
+            c_breakdown = cost_data.get("breakdown", {})
+            
+            total_cost += c_total
+            breakdown["telephony"] += c_breakdown.get("telephony", 0.0)
+            breakdown["asr"] += c_breakdown.get("asr", 0.0)
+            breakdown["tts"] += c_breakdown.get("tts", 0.0)
+            breakdown["llm"] += c_breakdown.get("llm", 0.0)
+            
+            # Daily aggregation
+            date_str = created_at_dt.strftime("%Y-%m-%d")
+            daily_costs[date_str] = daily_costs.get(date_str, 0.0) + c_total
+
+        return {
+            "period_days": days,
+            "total_cost": round(total_cost, 4),
+            "breakdown": {k: round(v, 4) for k, v in breakdown.items()},
+            "daily_costs": [{"date": k, "cost": round(v, 4)} for k, v in sorted(daily_costs.items(), reverse=True)]
+        }
+    except Exception as e:
+        print(f"Error calculating costs: {e}")
+        # Return empty structure on error to prevent UI crash
+        return {
+            "period_days": days,
+            "total_cost": 0.0,
+            "breakdown": {"telephony": 0.0, "asr": 0.0, "tts": 0.0, "llm": 0.0},
+            "daily_costs": []
+        }
+
+
 @router.get("/calls", response_model=List[CallSummary])
 async def get_recent_calls(limit: int = 50, offset: int = 0):
     """Get recent calls for the dashboard."""

@@ -94,7 +94,11 @@ class LLMClient:
                 "content": message.content or "",
                 "tool_calls": None,
                 "model": model,
-                "finish_reason": choice.finish_reason
+                "finish_reason": choice.finish_reason,
+                "usage": {
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens
+                } if response.usage else None
             }
             
             if message.tool_calls:
@@ -207,7 +211,7 @@ class LLMClient:
             tool_call = result["tool_calls"][0]
             logger.info(f"Tool call: {tool_call['function']['name']}")
 
-        return result.get("content", "")
+        return result
 
     def _get_error_message(self, language: str) -> str:
         """Get error message in the appropriate language - warm and apologetic."""

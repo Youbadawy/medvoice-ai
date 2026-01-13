@@ -99,6 +99,11 @@ class ConversationManager:
         # Track conversation metrics for status determination
         self.ai_response_count = 0
         self.caller_message_count = 0
+        
+        # Usage metrics for cost tracking
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_tts_chars = 0
 
         # Prevent duplicate filler phrases during tool call chains
         self._filler_used_this_turn = False
@@ -185,14 +190,24 @@ class ConversationManager:
             self.state = ConversationState.TRANSFERRING
             return SystemPrompts.get_transfer_message(self.language)
 
-        # Get LLM response
-        try:
-            system_prompt = SystemPrompts.get_prompt(self.language)
-            response = await self.llm_client.get_response(
+            # Inject emotion level into system prompt
+            system_prompt = SystemPrompts.get_prompt(
+                language=self.language,
+                emotion_level=self.settings.emotion_level
+            )
+            response_data = await self.llm_client.get_response(
                 conversation_history=self.messages,
                 system_prompt=system_prompt,
                 language=self.language
             )
+
+            # Track usage
+            if response_data.get("usage"):
+                self.total_input_tokens += response_data["usage"].get("input_tokens", 0)
+                self.total_output_tokens += response_data["usage"].get("output_tokens", 0)
+
+            response = response_data.get("content", "")
+
 
             if response:
                 self.ai_response_count += 1
@@ -229,7 +244,11 @@ class ConversationManager:
         # Stream LLM response
         # Stream LLM response
         try:
-            system_prompt = SystemPrompts.get_prompt(self.language)
+            # Inject emotion level into system prompt
+            system_prompt = SystemPrompts.get_prompt(
+                language=self.language,
+                emotion_level=self.settings.emotion_level
+            )
             
             tool_calls_buffer = [] 
             
@@ -311,6 +330,7 @@ class ConversationManager:
                         })
                         
                         # Recursively get new response (streaming)
+                        # The system prompt is regenerated in the next call, so it will pick up the settings.
                         # We yield the result of the new stream
                         async for token in self.get_response_streaming():
                             yield token
@@ -586,6 +606,25 @@ class ConversationManager:
             # Determine call status
             call_status = self.get_call_status()
 
+            # Calculate Costs
+            from services.cost_tracker import CostService
+            
+            # Estimate tokens if not tracked perfectly (fallback)
+            # Rough est: 1 token ~= 4 chars of text
+            if self.total_input_tokens == 0 and self.total_output_tokens == 0:
+                transcript_text = " ".join([m.get("text", "") for m in self.transcript])
+                est_tokens = len(transcript_text) / 4
+                self.total_input_tokens = int(est_tokens * 0.7)
+                self.total_output_tokens = int(est_tokens * 0.3)
+
+            cost_data = CostService.calculate_call_cost(
+                duration_seconds=duration_seconds,
+                tts_characters=self.total_tts_chars,
+                llm_input_tokens=self.total_input_tokens,
+                llm_output_tokens=self.total_output_tokens,
+                model_name=self.settings.openrouter_model_primary
+            )
+
             # Update call record
             await self.firebase.end_call(self.call_sid, {
                 "status": call_status,
@@ -594,13 +633,19 @@ class ConversationManager:
                 "language": self.language,
                 "ended_at": end_time.isoformat(),
                 "ai_response_count": self.ai_response_count,
-                "caller_message_count": self.caller_message_count
+                "caller_message_count": self.caller_message_count,
+                "cost_data": cost_data,  # Save cost data
+                "usage_metrics": {
+                    "tts_chars": self.total_tts_chars,
+                    "input_tokens": self.total_input_tokens,
+                    "output_tokens": self.total_output_tokens
+                }
             })
 
             # Save transcript
             await self.firebase.save_transcript(self.call_sid, self.transcript)
 
-            logger.info(f"Transcript saved for call {self.call_sid}, status: {call_status}, duration: {duration_seconds}s")
+            logger.info(f"Transcript saved for call {self.call_sid}, status: {call_status}, cost: ${cost_data['total_cost']}")
         except Exception as e:
             logger.error(f"Error saving transcript: {e}")
 

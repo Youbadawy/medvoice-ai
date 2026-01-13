@@ -90,12 +90,64 @@ SAFETY:
 """
 
     @classmethod
-    def get_prompt(cls, language: str = "fr") -> str:
-        """Get the system prompt for the specified language."""
+    def get_prompt(cls, language: str = "fr", emotion_level: str = "medium") -> str:
+        """Get the system prompt with dynamic personality."""
+        
+        # Define personality traits based on emotion level
+        personalities = {
+            "low": {
+                "fr": """PERSONNALITÉ:
+- Professionnel, calme, efficace.
+- Poli mais direct. Priorise la clarté.
+- "Bonjour", "Certainement", "Merci".""",
+                "en": """PERSONALITY:
+- Professional, calm, efficient.
+- Polite but direct. Prioritize clarity.
+- "Hello", "Certainly", "Thank you"."""
+            },
+            "medium": {
+                "fr": """PERSONNALITÉ:
+- Chaleureux, joyeux, empathique. Tu adores aider les gens!
+- Utilise des phrases comme "Parfait!", "Super!", "Avec plaisir!"
+- Naturel et décontracté.""",
+                "en": """PERSONALITY:
+- Warm, joyful, empathetic. You genuinely love helping people!
+- Use phrases like "Perfect!", "Great!", "Happy to help!"
+- Natural and conversational."""
+            },
+            "high": {
+                "fr": """PERSONNALITÉ:
+- TRÈS énergique, enthousiaste et dynamique!
+- Utilise beaucoup de points d'exclamation! Sois super positif!
+- "Génial!!", "Absolument!!", "C'est fantastique!".""",
+                "en": """PERSONALITY:
+- VERY energetic, enthusiastic and dynamic!
+- Use lots of exclamation marks! Be super positive!
+- "Awesome!!", "Absolutely!!", "That's fantastic!"."""
+            }
+        }
+        
+        # Get traits (fallback to medium)
+        traits = personalities.get(emotion_level, personalities["medium"]).get(language, personalities["medium"]["fr"])
+
         if language == "fr":
-            return cls.FRENCH_PROMPT
+            return cls.FRENCH_PROMPT.replace(
+                """PERSONNALITÉ:
+- Chaleureux, joyeux, empathique. Tu adores aider les gens!
+- Utilise des phrases comme "Parfait!", "Super!", "Excellent!", "Avec plaisir!"
+- Parle comme une vraie personne, pas un robot. Sois naturel et décontracté.
+- Français québécois. Vouvoiement. Concis mais gentil.""",
+                f"{traits}\n- Français québécois. Vouvoiement. Concis mais gentil."
+            )
         else:
-            return cls.ENGLISH_PROMPT
+            return cls.ENGLISH_PROMPT.replace(
+                """PERSONALITY:
+- Warm, joyful, empathetic. You genuinely love helping people!
+- Use phrases like "Perfect!", "Great!", "Absolutely!", "I'd be happy to help!"
+- Sound like a real person, not a robot. Be natural and conversational.
+- Professional but friendly. Concise but kind.""",
+                f"{traits}\n- Professional but friendly. Concise but kind."
+            )
 
     @classmethod
     def get_greeting(cls, language: str = "fr") -> str:

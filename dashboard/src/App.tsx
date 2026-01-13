@@ -6,11 +6,14 @@ import {
   Phone,
   Calendar,
   Settings,
-  Plus
+  Plus,
+  Settings,
 } from 'lucide-react'
+import { FiDollarSign } from 'react-icons/fi'
 import Dashboard from './pages/Dashboard'
 import Calls from './pages/Calls'
 import Appointments from './pages/Appointments'
+import Costs from './pages/Costs'
 import SettingsPage from './pages/Settings'
 import ManualBookingModal from './components/ManualBookingModal'
 import clsx from 'clsx'
@@ -20,6 +23,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Calls', href: '/calls', icon: Phone },
   { name: 'Appointments', href: '/appointments', icon: Calendar },
+  { name: 'Financials', href: '/costs', icon: FiDollarSign },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
@@ -111,6 +115,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/calls" element={<Calls />} />
             <Route path="/appointments" element={<Appointments />} />
+            <Route path="/costs" element={<Costs />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </div>
