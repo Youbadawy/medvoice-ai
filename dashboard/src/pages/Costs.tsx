@@ -1,27 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
-    Box,
-    Heading,
-    Text,
-    SimpleGrid,
-    Stat,
-    StatLabel,
-    StatNumber,
-    StatHelpText,
-    Table,
-    Thead,
-    Tbody,
-    Tr,
-    Th,
-    Td,
-    Card,
-    CardHeader,
-    CardBody,
-    Stack,
-    Badge,
-    Flex,
-    Spinner
-} from '@chakra-ui/react';
+import { useState, useEffect } from 'react';
+import { DollarSign, Activity, Phone, Cpu } from 'lucide-react';
 import { API_URL } from '../config';
 
 interface CostBreakdown {
@@ -67,148 +45,168 @@ const Costs = () => {
 
     if (loading) {
         return (
-            <Flex justify="center" align="center" h="50vh">
-                <Spinner size="xl" color="brand.500" />
-            </Flex>
+            <div className="flex justify-center items-center h-[50vh]">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+            </div>
         );
     }
 
     if (!data) {
-        return <Text>No cost data available.</Text>;
+        return <p className="text-gray-500">No cost data available.</p>;
     }
 
+    const getStatusBadge = (cost: number) => {
+        if (cost > 10) return { color: 'bg-red-100 text-red-700', label: 'High' };
+        if (cost > 2) return { color: 'bg-yellow-100 text-yellow-700', label: 'Moderate' };
+        return { color: 'bg-green-100 text-green-700', label: 'Low' };
+    };
+
+    const getPercentage = (value: number) => {
+        if (data.total_cost === 0) return 0;
+        return (value / data.total_cost) * 100;
+    };
+
     return (
-        <Box>
-            <Heading mb={6} size="lg">Financial Overview (Last 30 Days)</Heading>
+        <div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-6">Financial Overview (Last 30 Days)</h1>
 
-            <SimpleGrid columns={{ base: 1, md: 4 }} spacing={6} mb={8}>
-                <Card>
-                    <CardBody>
-                        <Stat>
-                            <StatLabel>Total Spend</StatLabel>
-                            <StatNumber>${data.total_cost.toFixed(2)}</StatNumber>
-                            <StatHelpText>Last 30 Days</StatHelpText>
-                        </Stat>
-                    </CardBody>
-                </Card>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-primary-100 rounded-lg">
+                            <DollarSign className="w-5 h-5 text-primary-600" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-500">Total Spend</span>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900">${data.total_cost.toFixed(2)}</p>
+                    <p className="text-xs text-gray-400 mt-1">Last 30 Days</p>
+                </div>
 
-                <Card>
-                    <CardBody>
-                        <Stat>
-                            <StatLabel>Voice & ASR</StatLabel>
-                            <StatNumber>${(data.breakdown.telephony + data.breakdown.asr).toFixed(2)}</StatNumber>
-                            <StatHelpText>Twilio + Deepgram</StatHelpText>
-                        </Stat>
-                    </CardBody>
-                </Card>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-purple-100 rounded-lg">
+                            <Phone className="w-5 h-5 text-purple-600" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-500">Voice & ASR</span>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900">${(data.breakdown.telephony + data.breakdown.asr).toFixed(2)}</p>
+                    <p className="text-xs text-gray-400 mt-1">Twilio + Deepgram</p>
+                </div>
 
-                <Card>
-                    <CardBody>
-                        <Stat>
-                            <StatLabel>AI Brain</StatLabel>
-                            <StatNumber>${data.breakdown.llm.toFixed(2)}</StatNumber>
-                            <StatHelpText>DeepSeek / GPT-4o</StatHelpText>
-                        </Stat>
-                    </CardBody>
-                </Card>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-green-100 rounded-lg">
+                            <Cpu className="w-5 h-5 text-green-600" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-500">AI Brain</span>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900">${data.breakdown.llm.toFixed(2)}</p>
+                    <p className="text-xs text-gray-400 mt-1">Gemini / DeepSeek</p>
+                </div>
 
-                <Card>
-                    <CardBody>
-                        <Stat>
-                            <StatLabel>Synthesis (TTS)</StatLabel>
-                            <StatNumber>${data.breakdown.tts.toFixed(2)}</StatNumber>
-                            <StatHelpText>Google Journey</StatHelpText>
-                        </Stat>
-                    </CardBody>
-                </Card>
-            </SimpleGrid>
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-orange-100 rounded-lg">
+                            <Activity className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <span className="text-sm font-medium text-gray-500">Synthesis (TTS)</span>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900">${data.breakdown.tts.toFixed(2)}</p>
+                    <p className="text-xs text-gray-400 mt-1">Google Journey</p>
+                </div>
+            </div>
 
-            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={8}>
-                <Card>
-                    <CardHeader>
-                        <Heading size="md">Daily Breakdown</Heading>
-                    </CardHeader>
-                    <CardBody>
-                        <Table variant="simple" size="sm">
-                            <Thead>
-                                <Tr>
-                                    <Th>Date</Th>
-                                    <Th isNumeric>Cost (USD)</Th>
-                                    <Th>Status</Th>
-                                </Tr>
-                            </Thead>
-                            <Tbody>
-                                {data.daily_costs.map((day) => (
-                                    <Tr key={day.date}>
-                                        <Td>{day.date}</Td>
-                                        <Td isNumeric fontWeight="bold">${day.cost.toFixed(2)}</Td>
-                                        <Td>
-                                            <Badge colorScheme={day.cost > 10 ? "red" : day.cost > 2 ? "yellow" : "green"}>
-                                                {day.cost > 10 ? "High" : day.cost > 2 ? "Moderate" : "Low"}
-                                            </Badge>
-                                        </Td>
-                                    </Tr>
-                                ))}
+            {/* Tables */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Daily Breakdown */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                    <div className="px-6 py-4 border-b border-gray-100">
+                        <h2 className="text-lg font-semibold text-gray-900">Daily Breakdown</h2>
+                    </div>
+                    <div className="p-6">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="pb-3">Date</th>
+                                    <th className="pb-3 text-right">Cost (USD)</th>
+                                    <th className="pb-3">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {data.daily_costs.map((day) => {
+                                    const status = getStatusBadge(day.cost);
+                                    return (
+                                        <tr key={day.date}>
+                                            <td className="py-3 text-sm text-gray-900">{day.date}</td>
+                                            <td className="py-3 text-sm font-semibold text-gray-900 text-right">${day.cost.toFixed(2)}</td>
+                                            <td className="py-3">
+                                                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${status.color}`}>
+                                                    {status.label}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                                 {data.daily_costs.length === 0 && (
-                                    <Tr>
-                                        <Td colSpan={3} textAlign="center">No usage recorded.</Td>
-                                    </Tr>
+                                    <tr>
+                                        <td colSpan={3} className="py-8 text-center text-gray-400">No usage recorded.</td>
+                                    </tr>
                                 )}
-                            </Tbody>
-                        </Table>
-                    </CardBody>
-                </Card>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-                <Card>
-                    <CardHeader>
-                        <Heading size="md">Cost Distribution</Heading>
-                    </CardHeader>
-                    <CardBody>
-                        <Stack spacing={4}>
-                            <Box>
-                                <Flex justify="space-between" mb={1}>
-                                    <Text fontSize="sm">Telephony (Twilio)</Text>
-                                    <Text fontSize="sm" fontWeight="bold">${data.breakdown.telephony.toFixed(4)}</Text>
-                                </Flex>
-                                <Box w="100%" h="2" bg="gray.100" borderRadius="full">
-                                    <Box h="100%" bg="blue.400" borderRadius="full" w={`${(data.breakdown.telephony / data.total_cost * 100) || 0}%`} />
-                                </Box>
-                            </Box>
+                {/* Cost Distribution */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                    <div className="px-6 py-4 border-b border-gray-100">
+                        <h2 className="text-lg font-semibold text-gray-900">Cost Distribution</h2>
+                    </div>
+                    <div className="p-6 space-y-5">
+                        <div>
+                            <div className="flex justify-between mb-1.5">
+                                <span className="text-sm text-gray-600">Telephony (Twilio)</span>
+                                <span className="text-sm font-semibold text-gray-900">${data.breakdown.telephony.toFixed(4)}</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${getPercentage(data.breakdown.telephony)}%` }} />
+                            </div>
+                        </div>
 
-                            <Box>
-                                <Flex justify="space-between" mb={1}>
-                                    <Text fontSize="sm">ASR (Deepgram)</Text>
-                                    <Text fontSize="sm" fontWeight="bold">${data.breakdown.asr.toFixed(4)}</Text>
-                                </Flex>
-                                <Box w="100%" h="2" bg="gray.100" borderRadius="full">
-                                    <Box h="100%" bg="purple.400" borderRadius="full" w={`${(data.breakdown.asr / data.total_cost * 100) || 0}%`} />
-                                </Box>
-                            </Box>
+                        <div>
+                            <div className="flex justify-between mb-1.5">
+                                <span className="text-sm text-gray-600">ASR (Deepgram)</span>
+                                <span className="text-sm font-semibold text-gray-900">${data.breakdown.asr.toFixed(4)}</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-purple-500 rounded-full" style={{ width: `${getPercentage(data.breakdown.asr)}%` }} />
+                            </div>
+                        </div>
 
-                            <Box>
-                                <Flex justify="space-between" mb={1}>
-                                    <Text fontSize="sm">LLM Intelligence</Text>
-                                    <Text fontSize="sm" fontWeight="bold">${data.breakdown.llm.toFixed(4)}</Text>
-                                </Flex>
-                                <Box w="100%" h="2" bg="gray.100" borderRadius="full">
-                                    <Box h="100%" bg="green.400" borderRadius="full" w={`${(data.breakdown.llm / data.total_cost * 100) || 0}%`} />
-                                </Box>
-                            </Box>
+                        <div>
+                            <div className="flex justify-between mb-1.5">
+                                <span className="text-sm text-gray-600">LLM Intelligence</span>
+                                <span className="text-sm font-semibold text-gray-900">${data.breakdown.llm.toFixed(4)}</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-green-500 rounded-full" style={{ width: `${getPercentage(data.breakdown.llm)}%` }} />
+                            </div>
+                        </div>
 
-                            <Box>
-                                <Flex justify="space-between" mb={1}>
-                                    <Text fontSize="sm">Text-to-Speech</Text>
-                                    <Text fontSize="sm" fontWeight="bold">${data.breakdown.tts.toFixed(4)}</Text>
-                                </Flex>
-                                <Box w="100%" h="2" bg="gray.100" borderRadius="full">
-                                    <Box h="100%" bg="orange.400" borderRadius="full" w={`${(data.breakdown.tts / data.total_cost * 100) || 0}%`} />
-                                </Box>
-                            </Box>
-                        </Stack>
-                    </CardBody>
-                </Card>
-            </SimpleGrid>
-        </Box>
+                        <div>
+                            <div className="flex justify-between mb-1.5">
+                                <span className="text-sm text-gray-600">Text-to-Speech</span>
+                                <span className="text-sm font-semibold text-gray-900">${data.breakdown.tts.toFixed(4)}</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-orange-500 rounded-full" style={{ width: `${getPercentage(data.breakdown.tts)}%` }} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 };
 

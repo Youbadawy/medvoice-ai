@@ -7,8 +7,8 @@ import {
   Calendar,
   Settings,
   Plus,
+  DollarSign,
 } from 'lucide-react'
-import { FiDollarSign } from 'react-icons/fi'
 import Dashboard from './pages/Dashboard'
 import Calls from './pages/Calls'
 import Appointments from './pages/Appointments'
@@ -22,7 +22,7 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Calls', href: '/calls', icon: Phone },
   { name: 'Appointments', href: '/appointments', icon: Calendar },
-  { name: 'Financials', href: '/costs', icon: FiDollarSign },
+  { name: 'Financials', href: '/costs', icon: DollarSign },
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
