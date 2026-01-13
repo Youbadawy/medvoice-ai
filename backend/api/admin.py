@@ -137,7 +137,7 @@ async def get_costs(days: int = 30):
     try:
         firebase = get_firebase_client()
         calls = await firebase.get_recent_calls(limit=500) # Fetch ample history
-        
+
         total_cost = 0.0
         breakdown = {
             "telephony": 0.0,
@@ -145,9 +145,9 @@ async def get_costs(days: int = 30):
             "tts": 0.0,
             "llm": 0.0
         }
-        
+
         daily_costs = {}
-        
+
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
 
@@ -156,7 +156,7 @@ async def get_costs(days: int = 30):
             created_at = call.get("created_at")
             if not created_at:
                 continue
-                
+
             # If string, parse it. Firestore client usually returns datetime though.
             if isinstance(created_at, str):
                 try:
@@ -172,16 +172,16 @@ async def get_costs(days: int = 30):
             cost_data = call.get("cost_data", {})
             if not cost_data:
                 continue
-                
+
             c_total = cost_data.get("total_cost", 0.0)
             c_breakdown = cost_data.get("breakdown", {})
-            
+
             total_cost += c_total
             breakdown["telephony"] += c_breakdown.get("telephony", 0.0)
             breakdown["asr"] += c_breakdown.get("asr", 0.0)
             breakdown["tts"] += c_breakdown.get("tts", 0.0)
             breakdown["llm"] += c_breakdown.get("llm", 0.0)
-            
+
             # Daily aggregation
             date_str = created_at_dt.strftime("%Y-%m-%d")
             daily_costs[date_str] = daily_costs.get(date_str, 0.0) + c_total
@@ -200,6 +200,245 @@ async def get_costs(days: int = 30):
             "total_cost": 0.0,
             "breakdown": {"telephony": 0.0, "asr": 0.0, "tts": 0.0, "llm": 0.0},
             "daily_costs": []
+        }
+
+
+@router.get("/costs/analytics")
+async def get_cost_analytics(days: int = 30):
+    """
+    Get comprehensive cost analytics with breakdowns by provider, status, and trends.
+    """
+    try:
+        firebase = get_firebase_client()
+        calls = await firebase.get_recent_calls(limit=500)
+
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+
+        # Initialize aggregation structures
+        totals = {"cost": 0.0, "calls": 0}
+        by_provider = {
+            "telephony": 0.0,
+            "asr": 0.0,
+            "tts": 0.0,
+            "llm": 0.0
+        }
+        by_status = {}
+        daily_trend = {}
+        top_calls = []
+
+        for call in calls:
+            created_at = call.get("created_at")
+            if not created_at:
+                continue
+
+            if isinstance(created_at, str):
+                try:
+                    created_at_dt = datetime.fromisoformat(created_at)
+                except ValueError:
+                    continue
+            else:
+                created_at_dt = created_at
+
+            if created_at_dt < start_date:
+                continue
+
+            cost_data = call.get("cost_data", {})
+            c_total = cost_data.get("total_cost", 0.0) if cost_data else 0.0
+            c_breakdown = cost_data.get("breakdown", {}) if cost_data else {}
+
+            # Totals
+            totals["cost"] += c_total
+            totals["calls"] += 1
+
+            # By provider
+            by_provider["telephony"] += c_breakdown.get("telephony", 0.0)
+            by_provider["asr"] += c_breakdown.get("asr", 0.0)
+            by_provider["tts"] += c_breakdown.get("tts", 0.0)
+            by_provider["llm"] += c_breakdown.get("llm", 0.0)
+
+            # By status
+            status = call.get("status", "unknown")
+            if status not in by_status:
+                by_status[status] = {"count": 0, "cost": 0.0}
+            by_status[status]["count"] += 1
+            by_status[status]["cost"] += c_total
+
+            # Daily trend
+            date_str = created_at_dt.strftime("%Y-%m-%d")
+            if date_str not in daily_trend:
+                daily_trend[date_str] = {"cost": 0.0, "calls": 0}
+            daily_trend[date_str]["cost"] += c_total
+            daily_trend[date_str]["calls"] += 1
+
+            # Track for top expensive calls
+            top_calls.append({
+                "call_sid": call.get("call_id", call.get("call_sid", "")),
+                "caller_number": call.get("caller_number", call.get("phone_number", "Unknown")),
+                "cost": c_total,
+                "duration": call.get("duration_seconds", 0),
+                "status": status,
+                "booking_made": call.get("booking_made", False),
+                "created_at": created_at_dt.isoformat() if isinstance(created_at_dt, datetime) else str(created_at_dt)
+            })
+
+        # Calculate derived metrics
+        avg_per_call = totals["cost"] / totals["calls"] if totals["calls"] > 0 else 0.0
+        actual_days = len(daily_trend) if daily_trend else 1
+        avg_per_day = totals["cost"] / actual_days if actual_days > 0 else 0.0
+
+        # Calculate provider percentages
+        provider_breakdown = {}
+        for provider, cost in by_provider.items():
+            provider_breakdown[provider] = {
+                "cost": round(cost, 4),
+                "percentage": round((cost / totals["cost"] * 100) if totals["cost"] > 0 else 0, 1)
+            }
+
+        # Round status costs
+        status_breakdown = {}
+        for status, data in by_status.items():
+            status_breakdown[status] = {
+                "count": data["count"],
+                "cost": round(data["cost"], 4)
+            }
+
+        # Sort and format daily trend
+        trend_list = [
+            {"date": k, "cost": round(v["cost"], 4), "calls": v["calls"]}
+            for k, v in sorted(daily_trend.items(), reverse=True)
+        ]
+
+        # Get top 5 most expensive calls
+        top_calls.sort(key=lambda x: x["cost"], reverse=True)
+        top_expensive = top_calls[:5]
+        for call in top_expensive:
+            call["cost"] = round(call["cost"], 4)
+
+        return {
+            "period": {
+                "start": start_date.strftime("%Y-%m-%d"),
+                "end": end_date.strftime("%Y-%m-%d"),
+                "days": days
+            },
+            "totals": {
+                "cost": round(totals["cost"], 4),
+                "calls": totals["calls"],
+                "avg_per_call": round(avg_per_call, 4),
+                "avg_per_day": round(avg_per_day, 4)
+            },
+            "by_provider": provider_breakdown,
+            "by_status": status_breakdown,
+            "daily_trend": trend_list,
+            "top_expensive_calls": top_expensive
+        }
+    except Exception as e:
+        print(f"Error in cost analytics: {e}")
+        return {
+            "period": {"start": "", "end": "", "days": days},
+            "totals": {"cost": 0.0, "calls": 0, "avg_per_call": 0.0, "avg_per_day": 0.0},
+            "by_provider": {},
+            "by_status": {},
+            "daily_trend": [],
+            "top_expensive_calls": []
+        }
+
+
+@router.get("/calls/costs")
+async def get_calls_with_costs(
+    start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    limit: int = Query(100, description="Max number of calls to return"),
+    status: Optional[str] = Query(None, description="Filter by status")
+):
+    """
+    Get per-call cost details with filtering options.
+    """
+    try:
+        firebase = get_firebase_client()
+        calls = await firebase.get_recent_calls(limit=500)
+
+        # Parse date filters
+        if start:
+            try:
+                start_date = datetime.strptime(start, "%Y-%m-%d")
+            except ValueError:
+                start_date = datetime.now() - timedelta(days=30)
+        else:
+            start_date = datetime.now() - timedelta(days=30)
+
+        if end:
+            try:
+                end_date = datetime.strptime(end, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            except ValueError:
+                end_date = datetime.now()
+        else:
+            end_date = datetime.now()
+
+        filtered_calls = []
+        total_cost = 0.0
+
+        for call in calls:
+            created_at = call.get("created_at")
+            if not created_at:
+                continue
+
+            if isinstance(created_at, str):
+                try:
+                    created_at_dt = datetime.fromisoformat(created_at)
+                except ValueError:
+                    continue
+            else:
+                created_at_dt = created_at
+
+            # Date filter
+            if created_at_dt < start_date or created_at_dt > end_date:
+                continue
+
+            # Status filter
+            call_status = call.get("status", "unknown")
+            if status and call_status != status:
+                continue
+
+            cost_data = call.get("cost_data", {})
+            c_total = cost_data.get("total_cost", 0.0) if cost_data else 0.0
+            total_cost += c_total
+
+            filtered_calls.append({
+                "call_sid": call.get("call_id", call.get("call_sid", "")),
+                "caller_number": call.get("caller_number", call.get("phone_number", "Unknown")),
+                "created_at": created_at_dt.isoformat() if isinstance(created_at_dt, datetime) else str(created_at_dt),
+                "duration_seconds": call.get("duration_seconds", 0),
+                "status": call_status,
+                "booking_made": call.get("booking_made", False),
+                "language": call.get("language", "fr"),
+                "cost_data": {
+                    "total_cost": round(c_total, 4),
+                    "breakdown": {
+                        k: round(v, 4) for k, v in cost_data.get("breakdown", {}).items()
+                    } if cost_data else {}
+                }
+            })
+
+            if len(filtered_calls) >= limit:
+                break
+
+        # Sort by created_at descending
+        filtered_calls.sort(key=lambda x: x["created_at"], reverse=True)
+
+        return {
+            "calls": filtered_calls[:limit],
+            "summary": {
+                "total_calls": len(filtered_calls),
+                "total_cost": round(total_cost, 4),
+                "avg_cost_per_call": round(total_cost / len(filtered_calls), 4) if filtered_calls else 0.0
+            }
+        }
+    except Exception as e:
+        print(f"Error getting calls with costs: {e}")
+        return {
+            "calls": [],
+            "summary": {"total_calls": 0, "total_cost": 0.0, "avg_cost_per_call": 0.0}
         }
 
 
@@ -534,20 +773,36 @@ async def get_calendar_data(
     # Get all appointments for the month
     appointments = await firebase.get_appointments(start_date, end_date.replace(hour=23, minute=59))
 
-    # Build appointment count by date
+    # Generate calendar data for each day
+    calendar_data = []
+    current_date = start_date.date()
+
+    # Timezone handling for accurate day grouping
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("America/Montreal")
+    except ImportError:
+        import pytz
+        tz = pytz.timezone("America/Montreal")
+
+    # Build appointment count by date with timezone adjustment
     appt_by_date = {}
     for appt in appointments:
         appt_time = appt.get("appointment_time")
         if appt_time:
-            if hasattr(appt_time, 'date'):
-                date_key = appt_time.date().isoformat()
+            # Convert to local time if timezone aware, otherwise assume UTC and convert
+            if isinstance(appt_time, datetime):
+                if appt_time.tzinfo:
+                    local_time = appt_time.astimezone(tz)
+                else:
+                    # Assume UTC if naive
+                    local_time = appt_time.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz)
+                date_key = local_time.date().isoformat()
             else:
+                 # Fallback for strings (shouldn't happen with Firestore client properly typed)
                 date_key = str(appt_time)[:10]
+            
             appt_by_date[date_key] = appt_by_date.get(date_key, 0) + 1
-
-    # Generate calendar data for each day
-    calendar_data = []
-    current_date = start_date.date()
 
     while current_date <= end_date.date():
         date_str = current_date.isoformat()
@@ -575,3 +830,57 @@ async def get_calendar_data(
         current_date += timedelta(days=1)
 
     return calendar_data
+
+
+class AppointmentDetails(AppointmentResponse):
+    """Detailed appointment info including transcript."""
+    call_transcript: Optional[List[TranscriptEntry]] = None
+    call_duration: Optional[int] = None
+    call_recording_url: Optional[str] = None
+
+
+@router.get("/appointments/{booking_id}/details", response_model=AppointmentDetails)
+async def get_appointment_details(booking_id: str):
+    """Get full appointment details including call transcript."""
+    firebase = get_firebase_client()
+    
+    # Get appointment
+    appt = await firebase.get_appointment(booking_id)
+    if not appt:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+        
+    response = AppointmentDetails(
+        booking_id=appt.get("booking_id", ""),
+        confirmation_number=appt.get("confirmation_number"),
+        patient_name=appt.get("patient_name", "Unknown"),
+        patient_phone=appt.get("patient_phone", ""),
+        appointment_time=appt.get("appointment_time"),
+        visit_type=appt.get("visit_type", "general"),
+        provider=appt.get("provider", "Dr. Kamal"),
+        status=appt.get("status", "confirmed"),
+        booked_via=appt.get("booked_via", "ai"),
+        notes=appt.get("notes"),
+        created_at=appt.get("created_at")
+    )
+    
+    # Try to find associated call
+    call_sid = appt.get("call_sid")
+    if call_sid:
+        # Get Call details
+        call = await firebase.get_call(call_sid)
+        if call:
+            response.call_duration = call.get("duration_seconds")
+            response.call_recording_url = call.get("recording_url")
+            
+        # Get Transcript
+        transcript_data = await firebase.get_transcript(call_sid)
+        response.call_transcript = [
+            TranscriptEntry(
+                speaker=entry.get("speaker", "unknown"),
+                text=entry.get("text", ""),
+                timestamp=entry.get("timestamp")
+            )
+            for entry in transcript_data
+        ]
+        
+    return response
