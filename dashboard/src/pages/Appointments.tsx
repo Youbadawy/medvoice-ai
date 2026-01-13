@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import clsx from 'clsx'
 import { API_URL } from '../config'
 import {
   ViewToggle,
@@ -315,7 +316,12 @@ function BookingDetailsModal({ appointment, onClose }: { appointment: Appointmen
               <div className="text-sm text-gray-600">{appointment.patient_phone}</div>
             </div>
             <div className="text-right">
-              <div className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+              <div className={clsx(
+                'inline-block px-3 py-1 rounded-full text-sm font-medium',
+                appointment.status === 'cancelled'
+                  ? 'bg-red-100 text-red-800'
+                  : 'bg-green-100 text-green-800'
+              )}>
                 {appointment.status.toUpperCase()}
               </div>
               <div className="mt-1 text-sm text-gray-500">
@@ -337,7 +343,7 @@ function BookingDetailsModal({ appointment, onClose }: { appointment: Appointmen
           {/* Transcript Section */}
           <div>
             <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
-              <span>💬 Call Transcript</span>
+              <span>Call Transcript</span>
               {isLoading && <span className="text-xs font-normal text-gray-500">(Loading...)</span>}
             </h3>
 
@@ -363,7 +369,11 @@ function BookingDetailsModal({ appointment, onClose }: { appointment: Appointmen
                   </div>
                 ))
               ) : (
-                <p className="text-gray-500 text-center italic">No transcript available for this booking.</p>
+                <p className="text-gray-500 text-center">
+                  {appointment.booked_via === 'admin'
+                    ? 'Manual booking - no call transcript available.'
+                    : 'No transcript available for this booking.'}
+                </p>
               )}
             </div>
           </div>

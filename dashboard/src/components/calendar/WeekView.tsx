@@ -161,6 +161,29 @@ export function WeekView({
           </div>
         ))}
       </div>
+
+      {/* Appointments outside clinic hours */}
+      {appointments.filter(apt => {
+        const hour = new Date(apt.appointment_time).getHours()
+        return hour < 9 || hour >= 18
+      }).length > 0 && (
+        <div className="p-3 bg-amber-50 border-t border-amber-200">
+          <div className="text-xs font-medium text-amber-700 mb-2">After Hours / Outside Schedule</div>
+          <div className="flex flex-wrap gap-2">
+            {appointments.filter(apt => {
+              const hour = new Date(apt.appointment_time).getHours()
+              return hour < 9 || hour >= 18
+            }).map(apt => (
+              <AppointmentCard
+                key={apt.booking_id}
+                appointment={apt}
+                compact
+                onClick={() => onAppointmentClick(apt)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
