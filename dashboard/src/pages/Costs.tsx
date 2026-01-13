@@ -20,10 +20,8 @@ import {
     Stack,
     Badge,
     Flex,
-    Icon,
     Spinner
 } from '@chakra-ui/react';
-import { FiDollarSign, FiActivity, FiPhone, FiCpu } from 'react-icons/fi';
 import { API_URL } from '../config';
 
 interface CostBreakdown {

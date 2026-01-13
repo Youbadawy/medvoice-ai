@@ -7,7 +7,6 @@ import {
   Calendar,
   Settings,
   Plus,
-  Settings,
 } from 'lucide-react'
 import { FiDollarSign } from 'react-icons/fi'
 import Dashboard from './pages/Dashboard'
