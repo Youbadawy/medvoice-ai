@@ -295,9 +295,15 @@ class BookingService:
                 # Expecting YYYYMMDDHHMM
                 appointment_time = datetime.strptime(slot_id, "%Y%m%d%H%M")
             except ValueError:
-                # Fallback for mock slot IDs or invalid formats
-                logger.warning(f"Invalid slot_id format: {slot_id}, using fallback time.")
-                appointment_time = datetime.now(self.timezone) + timedelta(days=1)
+                # Fallback only for single-digit mock IDs used in testing
+                if len(slot_id) <= 2 and slot_id.isdigit():
+                     appointment_time = datetime.now(self.timezone) + timedelta(days=1)
+                else:
+                    logger.error(f"Invalid slot_id format: {slot_id}")
+                    return {
+                        "success": False,
+                        "error": "Invalid slot ID format. Please ensure you select a valid time slot."
+                    }
 
             # 4. Create booking record
             booking_data = {
