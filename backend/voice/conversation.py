@@ -190,6 +190,7 @@ class ConversationManager:
             self.state = ConversationState.TRANSFERRING
             return SystemPrompts.get_transfer_message(self.language)
 
+        try:
             # Inject emotion level into system prompt
             system_prompt = SystemPrompts.get_prompt(
                 language=self.language,
@@ -207,7 +208,6 @@ class ConversationManager:
                 self.total_output_tokens += response_data["usage"].get("output_tokens", 0)
 
             response = response_data.get("content", "")
-
 
             if response:
                 self.ai_response_count += 1
