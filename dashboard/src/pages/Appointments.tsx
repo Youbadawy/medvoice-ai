@@ -64,6 +64,7 @@ function Appointments() {
   const [view, setView] = useState<CalendarView>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [bookingModal, setBookingModal] = useState<{ slot: Slot; date: Date } | null>(null)
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null)
 
   // Calculate date ranges based on view
   const dateRange = useMemo(() => {
@@ -166,8 +167,7 @@ function Appointments() {
 
   // Handle appointment click
   const handleAppointmentClick = (appointment: Appointment) => {
-    // Could open a detail modal here in the future
-    console.log('Appointment clicked:', appointment)
+    setSelectedAppointment(appointment)
   }
 
   // Handle booking submit
@@ -276,6 +276,105 @@ function Appointments() {
           onSubmit={handleBookingSubmit}
         />
       )}
+
+      {/* Details Modal */}
+      {selectedAppointment && (
+        <BookingDetailsModal
+          appointment={selectedAppointment}
+          onClose={() => setSelectedAppointment(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function BookingDetailsModal({ appointment, onClose }: { appointment: Appointment; onClose: () => void }) {
+  const { data: details, isLoading } = useQuery({
+    queryKey: ['appointment', appointment.booking_id, 'details'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/api/admin/appointments/${appointment.booking_id}/details`)
+      if (!res.ok) throw new Error('Failed to fetch details')
+      return res.json()
+    }
+  })
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div className="p-6 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+          <h2 className="text-xl font-bold">Appointment Details</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">✕</button>
+        </div>
+
+        <div className="p-6 overflow-y-auto space-y-6">
+          {/* Header Info */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-500">Patient</label>
+              <div className="text-lg font-semibold">{appointment.patient_name}</div>
+              <div className="text-sm text-gray-600">{appointment.patient_phone}</div>
+            </div>
+            <div className="text-right">
+              <div className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                {appointment.status.toUpperCase()}
+              </div>
+              <div className="mt-1 text-sm text-gray-500">
+                {appointment.formatted_datetime || format(new Date(appointment.appointment_time), 'PPp')}
+              </div>
+            </div>
+          </div>
+
+          <hr />
+
+          {/* Notes */}
+          {appointment.notes && (
+            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100">
+              <h3 className="text-sm font-semibold text-yellow-900 mb-1">Medical Notes / RAMQ</h3>
+              <p className="text-gray-800">{appointment.notes}</p>
+            </div>
+          )}
+
+          {/* Transcript Section */}
+          <div>
+            <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <span>💬 Call Transcript</span>
+              {isLoading && <span className="text-xs font-normal text-gray-500">(Loading...)</span>}
+            </h3>
+
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 max-h-[300px] overflow-y-auto space-y-3">
+              {isLoading ? (
+                <div className="space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+                </div>
+              ) : details?.call_transcript && details.call_transcript.length > 0 ? (
+                details.call_transcript.map((entry: any, i: number) => (
+                  <div key={i} className={`flex ${entry.speaker === 'user' || entry.speaker === 'caller' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-lg p-3 ${entry.speaker === 'user' || entry.speaker === 'caller'
+                      ? 'bg-blue-600 text-white rounded-br-none'
+                      : 'bg-white border border-gray-200 shadow-sm rounded-bl-none'
+                      }`}>
+                      <div className={`text-xs mb-1 opacity-70 ${entry.speaker === 'user' || entry.speaker === 'caller' ? 'text-blue-100' : 'text-gray-500'
+                        }`}>
+                        {entry.speaker === 'user' || entry.speaker === 'caller' ? 'Patient' : 'Agent'}
+                      </div>
+                      <div>{entry.text}</div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 text-center italic">No transcript available for this booking.</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border-t bg-gray-50 rounded-b-xl flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg">
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

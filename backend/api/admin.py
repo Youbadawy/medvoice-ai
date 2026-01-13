@@ -348,15 +348,17 @@ async def get_cost_analytics(days: int = 30):
 async def get_calls_with_costs(
     start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-    limit: int = Query(100, description="Max number of calls to return"),
+    limit: int = Query(20, description="Max number of calls to return per page"),
+    offset: int = Query(0, description="Offset for pagination"),
     status: Optional[str] = Query(None, description="Filter by status")
 ):
     """
-    Get per-call cost details with filtering options.
+    Get per-call cost details with filtering options and pagination.
     """
     try:
         firebase = get_firebase_client()
-        calls = await firebase.get_recent_calls(limit=500)
+        # Fetch larger pool to filter from memory (temporary approach until complex indexes)
+        calls = await firebase.get_recent_calls(limit=1000)
 
         # Parse date filters
         if start:
@@ -402,6 +404,8 @@ async def get_calls_with_costs(
 
             cost_data = call.get("cost_data", {})
             c_total = cost_data.get("total_cost", 0.0) if cost_data else 0.0
+            
+            # Accumulate cost for ALL matching calls (before pagination)
             total_cost += c_total
 
             filtered_calls.append({
@@ -420,18 +424,19 @@ async def get_calls_with_costs(
                 }
             })
 
-            if len(filtered_calls) >= limit:
-                break
-
         # Sort by created_at descending
         filtered_calls.sort(key=lambda x: x["created_at"], reverse=True)
+        
+        # Apply pagination
+        total_matching_calls = len(filtered_calls)
+        paginated_calls = filtered_calls[offset : offset + limit]
 
         return {
-            "calls": filtered_calls[:limit],
+            "calls": paginated_calls,
             "summary": {
-                "total_calls": len(filtered_calls),
+                "total_calls": total_matching_calls,
                 "total_cost": round(total_cost, 4),
-                "avg_cost_per_call": round(total_cost / len(filtered_calls), 4) if filtered_calls else 0.0
+                "avg_cost_per_call": round(total_cost / total_matching_calls, 4) if total_matching_calls > 0 else 0.0
             }
         }
     except Exception as e:

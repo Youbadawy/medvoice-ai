@@ -112,6 +112,8 @@ const Costs = () => {
     const [days, setDays] = useState(30);
     const [expandedCall, setExpandedCall] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState<string>('');
+    const [page, setPage] = useState(0);
+    const LIMIT = 20;
 
     // Fetch analytics data
     const { data: analytics, isLoading: analyticsLoading } = useQuery<AnalyticsData>({
@@ -120,20 +122,22 @@ const Costs = () => {
             const res = await fetch(`${API_URL}/api/admin/costs/analytics?days=${days}`);
             return res.json();
         },
-        refetchInterval: 60000, // Refresh every minute
+        refetchInterval: 60000,
     });
 
     // Fetch per-call costs
     const { data: callsData, isLoading: callsLoading } = useQuery<CallsResponse>({
-        queryKey: ['calls-costs', days, statusFilter],
+        queryKey: ['calls-costs', days, statusFilter, page],
         queryFn: async () => {
             const start = format(subDays(new Date(), days), 'yyyy-MM-dd');
             const end = format(new Date(), 'yyyy-MM-dd');
-            let url = `${API_URL}/api/admin/calls/costs?start=${start}&end=${end}&limit=50`;
+            const offset = page * LIMIT;
+            let url = `${API_URL}/api/admin/calls/costs?start=${start}&end=${end}&limit=${LIMIT}&offset=${offset}`;
             if (statusFilter) url += `&status=${statusFilter}`;
             const res = await fetch(url);
             return res.json();
         },
+        keepPreviousData: true,
         refetchInterval: 60000,
     });
 
@@ -170,11 +174,10 @@ const Costs = () => {
                         <button
                             key={d}
                             onClick={() => setDays(d)}
-                            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                                days === d
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            }`}
+                            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${days === d
+                                ? 'bg-primary-600 text-white'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
                         >
                             {d}d
                         </button>
@@ -379,7 +382,10 @@ const Costs = () => {
                         <Filter className="w-4 h-4 text-gray-400" />
                         <select
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
+                            onChange={(e) => {
+                                setStatusFilter(e.target.value);
+                                setPage(0); // Reset page on filter change
+                            }}
                             className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                             <option value="">All Statuses</option>
@@ -485,6 +491,35 @@ const Costs = () => {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination Footer */}
+                {callsData && callsData.summary.total_calls > 0 && (
+                    <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between">
+                        <div className="text-sm text-gray-500">
+                            Showing <span className="font-medium">{page * LIMIT + 1}</span> to{' '}
+                            <span className="font-medium">
+                                {Math.min((page + 1) * LIMIT, callsData.summary.total_calls)}
+                            </span>{' '}
+                            of <span className="font-medium">{callsData.summary.total_calls}</span> results
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setPage(p => Math.max(0, p - 1))}
+                                disabled={page === 0}
+                                className="px-3 py-1 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Previous
+                            </button>
+                            <button
+                                onClick={() => setPage(p => p + 1)}
+                                disabled={!callsData || (page + 1) * LIMIT >= callsData.summary.total_calls}
+                                className="px-3 py-1 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
