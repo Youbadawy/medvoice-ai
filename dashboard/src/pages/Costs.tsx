@@ -5,16 +5,12 @@ import {
     DollarSign,
     Phone as PhoneIcon,
     Cpu,
-    Activity,
     TrendingUp,
-    TrendingDown,
     ChevronDown,
     ChevronUp,
-    Calendar,
     Clock,
     CheckCircle,
     XCircle,
-    ArrowUpRight,
     Filter
 } from 'lucide-react';
 import { API_URL } from '../config';
@@ -137,7 +133,7 @@ const Costs = () => {
             const res = await fetch(url);
             return res.json();
         },
-        keepPreviousData: true,
+        placeholderData: (previousData) => previousData,
         refetchInterval: 60000,
     });
 

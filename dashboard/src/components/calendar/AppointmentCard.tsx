@@ -13,6 +13,7 @@ export interface Appointment {
   status: string
   booked_via: string
   notes?: string
+  formatted_datetime?: string
 }
 
 interface AppointmentCardProps {
