@@ -1,6 +1,7 @@
 import { format, formatDistanceToNow } from 'date-fns'
 import { Phone, PhoneOff, ArrowRightLeft, Calendar, Clock } from 'lucide-react'
 import clsx from 'clsx'
+import StatusBadge from './StatusBadge'
 
 interface Call {
   call_id: string
@@ -24,43 +25,25 @@ function CallList({ calls, onSelectCall, selectedCallId, showTranscript: _showTr
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'active':
-        return <Phone className="w-4 h-4 text-green-500" />
+        return <Phone className="w-4 h-4 text-primary-500" />
       case 'transferred':
-        return <ArrowRightLeft className="w-4 h-4 text-yellow-500" />
+        return <ArrowRightLeft className="w-4 h-4 text-indigo-500" />
       default:
         return <PhoneOff className="w-4 h-4 text-gray-400" />
     }
   }
 
   const getStatusBadge = (call: Call) => {
-    if (call.status === 'active') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-          <span className="w-1.5 h-1.5 bg-green-500 rounded-full pulse" />
-          Active
-        </span>
-      )
-    }
-    if (call.transferred) {
-      return (
-        <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
-          Transferred
-        </span>
-      )
-    }
-    if (call.booking_made) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">
-          <Calendar className="w-3 h-3" />
-          Booked
-        </span>
-      )
-    }
-    return (
-      <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
-        Completed
+    if (call.status === 'active') return <StatusBadge status="active" />
+    if (call.transferred) return <StatusBadge status="transferred" />
+    if (call.booking_made) return (
+      <span className="inline-flex items-center gap-1.5 border rounded-full font-medium transition-colors bg-teal-50 text-teal-700 border-teal-200 px-2.5 py-0.5 text-xs">
+        <Calendar className="w-3 h-3" />
+        Booked
       </span>
     )
+
+    return <StatusBadge status={call.status} />
   }
 
   const formatDuration = (seconds?: number) => {

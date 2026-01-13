@@ -4,63 +4,37 @@ import { Search, Filter, Download } from 'lucide-react'
 import CallList from '../components/CallList'
 import TranscriptView from '../components/TranscriptView'
 
-// Mock data
-const mockCalls = [
-  {
-    call_id: 'CA125',
-    phone_number: '+1 514-555-1234',
-    language: 'fr',
-    status: 'completed',
-    started_at: new Date().toISOString(),
-    duration_seconds: 180,
-    booking_made: true,
-  },
-  {
-    call_id: 'CA124',
-    phone_number: '+1 514-555-5678',
-    language: 'en',
-    status: 'completed',
-    started_at: new Date(Date.now() - 1800000).toISOString(),
-    duration_seconds: 95,
-    booking_made: false,
-  },
-  {
-    call_id: 'CA123',
-    phone_number: '+1 514-555-9999',
-    language: 'fr',
-    status: 'transferred',
-    started_at: new Date(Date.now() - 3600000).toISOString(),
-    duration_seconds: 45,
-    booking_made: false,
-    transferred: true,
-  },
-  {
-    call_id: 'CA122',
-    phone_number: '+1 514-555-4444',
-    language: 'fr',
-    status: 'completed',
-    started_at: new Date(Date.now() - 7200000).toISOString(),
-    duration_seconds: 210,
-    booking_made: true,
-  },
-]
+import { API_URL } from '../config'
+
+interface Call {
+  call_id: string
+  phone_number: string
+  language: string
+  status: string
+  started_at: string
+  ended_at?: string
+  duration_seconds: number
+  booking_made?: boolean
+  transferred?: boolean
+}
 
 function Calls() {
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  const { data: calls } = useQuery({
+  const { data: calls, isLoading } = useQuery<Call[]>({
     queryKey: ['calls'],
     queryFn: async () => {
-      // TODO: Replace with actual API call
-      return mockCalls
+      const res = await fetch(`${API_URL}/api/admin/calls`)
+      if (!res.ok) throw new Error('Failed to fetch calls')
+      return res.json()
     },
   })
 
   const filteredCalls = calls?.filter(call => {
     const matchesSearch = call.phone_number.includes(searchQuery) ||
-                         call.call_id.toLowerCase().includes(searchQuery.toLowerCase())
+      call.call_id.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesStatus = statusFilter === 'all' || call.status === statusFilter
     return matchesSearch && matchesStatus
   })
@@ -109,15 +83,22 @@ function Calls() {
       {/* Main content */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Call List */}
+        {/* Call List */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Call History ({filteredCalls?.length || 0})
           </h2>
-          <CallList
-            calls={filteredCalls || []}
-            onSelectCall={setSelectedCallId}
-            selectedCallId={selectedCallId}
-          />
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            </div>
+          ) : (
+            <CallList
+              calls={filteredCalls || []}
+              onSelectCall={setSelectedCallId}
+              selectedCallId={selectedCallId}
+            />
+          )}
         </div>
 
         {/* Transcript */}

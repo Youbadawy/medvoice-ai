@@ -95,19 +95,34 @@ async def twilio_voice_webhook(request: Request):
     Twilio Voice webhook - called when a call is received.
     Returns TwiML to connect the call to a media stream.
     """
-    logger.info("📞 Incoming call received")
+    # Extract caller info from Twilio webhook
+    form_data = await request.form()
+    caller_from = form_data.get("From", "unknown")
+    call_sid = form_data.get("CallSid", "unknown")
+
+    logger.info(f"📞 Incoming call received - CallSid: {call_sid}, From: {caller_from}")
 
     # Get the WebSocket URL for media streaming
-    host = request.headers.get("host", "localhost:8000")
-    protocol = "wss" if request.url.scheme == "https" else "ws"
+    # Cloud Run uses x-forwarded-host header
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "localhost:8000")
+
+    # Always use wss:// for production (Cloud Run is always HTTPS)
+    is_production = settings.environment == "production"
+    protocol = "wss" if is_production else "ws"
     stream_url = f"{protocol}://{host}/twilio/media-stream"
 
-    # TwiML response to connect to WebSocket media stream
+    logger.info(f"📡 Stream URL: {stream_url}")
+
+    # TwiML response with bilingual greeting and media stream connection
+    # Pass caller number directly (not using Twilio substitution which can fail)
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+    <Say language="fr-CA" voice="Google.fr-CA-Wavenet-A">Bonjour, bienvenue à la clinique KaiMed, un moment s'il vous plaît.</Say>
+    <Pause length="1"/>
+    <Say language="en-CA" voice="Google.en-US-Wavenet-D">Hello, welcome to KaiMed Clinic, one moment please.</Say>
     <Connect>
         <Stream url="{stream_url}">
-            <Parameter name="caller" value="{{{{From}}}}" />
+            <Parameter name="caller" value="{caller_from}" />
         </Stream>
     </Connect>
 </Response>"""
@@ -150,9 +165,11 @@ async def twilio_status_callback(request: Request):
 
 
 if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 8080))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=port,
         reload=settings.environment == "development"
     )

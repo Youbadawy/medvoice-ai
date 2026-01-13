@@ -8,7 +8,7 @@ python-dotenv==1.0.0
 httpx==0.26.0
 
 # Voice Processing
-deepgram-sdk==3.0.0
+deepgram-sdk>=3.5.0
 google-cloud-texttospeech==2.16.0
 
 # LLM (OpenRouter - OpenAI compatible)
@@ -27,7 +27,7 @@ pydantic-settings==2.1.0
 
 # Utilities
 python-multipart==0.0.6
-audioop-lts==0.2.1  # Audio processing for mulaw conversion
+# audioop is built-in for Python 3.11, no external package needed
 
 # Development
 pytest==8.0.0

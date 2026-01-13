@@ -1,65 +1,179 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { format, addDays, startOfWeek } from 'date-fns'
-import { ChevronLeft, ChevronRight, Calendar, User } from 'lucide-react'
-import clsx from 'clsx'
+import { useState, useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns'
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { API_URL } from '../config'
+import {
+  ViewToggle,
+  CalendarView,
+  MonthGrid,
+  WeekView,
+  DayView,
+  Appointment,
+  NewBookingModal,
+  BookingFormData
+} from '../components/calendar'
 
-// Mock appointments
-const mockAppointments = [
-  {
-    id: '1',
-    patient_name: 'Marie Tremblay',
-    patient_phone: '+1 514-555-1234',
-    appointment_time: new Date().setHours(9, 0),
-    visit_type: 'general',
-    status: 'confirmed',
-    booked_via: 'ai',
-  },
-  {
-    id: '2',
-    patient_name: 'Jean-Pierre Lavoie',
-    patient_phone: '+1 514-555-5678',
-    appointment_time: new Date().setHours(10, 30),
-    visit_type: 'followup',
-    status: 'confirmed',
-    booked_via: 'ai',
-  },
-  {
-    id: '3',
-    patient_name: 'Sarah Johnson',
-    patient_phone: '+1 514-555-9999',
-    appointment_time: new Date().setHours(14, 0),
-    visit_type: 'vaccination',
-    status: 'confirmed',
-    booked_via: 'ai',
-  },
-]
-
-const visitTypeLabels: Record<string, string> = {
-  general: 'Examen général',
-  followup: 'Suivi',
-  vaccination: 'Vaccination',
+interface Slot {
+  slot_id: string
+  datetime: string
+  time_formatted: string
+  provider: string
+  duration_minutes: number
+  is_available: boolean
 }
 
-const visitTypeColors: Record<string, string> = {
-  general: 'bg-blue-100 text-blue-700',
-  followup: 'bg-purple-100 text-purple-700',
-  vaccination: 'bg-green-100 text-green-700',
+interface CalendarDay {
+  date: string
+  day_of_week: number
+  appointment_count: number
+  total_slots: number
+  available_slots: number
+}
+
+// API functions
+async function fetchAppointments(start: string, end: string): Promise<Appointment[]> {
+  const res = await fetch(`${API_URL}/api/admin/appointments?start=${start}&end=${end}`)
+  if (!res.ok) throw new Error('Failed to fetch appointments')
+  return res.json()
+}
+
+async function fetchSlots(start: string, end: string): Promise<Slot[]> {
+  const res = await fetch(`${API_URL}/api/admin/slots?start=${start}&end=${end}`)
+  if (!res.ok) throw new Error('Failed to fetch slots')
+  return res.json()
+}
+
+async function fetchCalendarData(month: string): Promise<CalendarDay[]> {
+  const res = await fetch(`${API_URL}/api/admin/calendar?month=${month}`)
+  if (!res.ok) throw new Error('Failed to fetch calendar data')
+  return res.json()
+}
+
+async function createAppointment(data: BookingFormData): Promise<void> {
+  const res = await fetch(`${API_URL}/api/admin/appointments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to create appointment')
 }
 
 function Appointments() {
+  const queryClient = useQueryClient()
+  const [view, setView] = useState<CalendarView>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
+  const [bookingModal, setBookingModal] = useState<{ slot: Slot; date: Date } | null>(null)
 
-  const { data: appointments } = useQuery({
-    queryKey: ['appointments', format(currentDate, 'yyyy-MM-dd')],
-    queryFn: async () => {
-      // TODO: Replace with actual API call
-      return mockAppointments
-    },
+  // Calculate date ranges based on view
+  const dateRange = useMemo(() => {
+    if (view === 'month') {
+      const start = startOfMonth(currentDate)
+      const end = endOfMonth(currentDate)
+      return {
+        start: format(start, 'yyyy-MM-dd'),
+        end: format(end, 'yyyy-MM-dd'),
+        month: format(currentDate, 'yyyy-MM')
+      }
+    } else if (view === 'week') {
+      const start = startOfWeek(currentDate, { weekStartsOn: 0 })
+      const end = endOfWeek(currentDate, { weekStartsOn: 0 })
+      return {
+        start: format(start, 'yyyy-MM-dd'),
+        end: format(end, 'yyyy-MM-dd'),
+        month: format(currentDate, 'yyyy-MM')
+      }
+    } else {
+      return {
+        start: format(currentDate, 'yyyy-MM-dd'),
+        end: format(currentDate, 'yyyy-MM-dd'),
+        month: format(currentDate, 'yyyy-MM')
+      }
+    }
+  }, [view, currentDate])
+
+  // Fetch appointments for current view
+  const { data: appointments = [], isLoading: loadingAppointments, refetch: refetchAppointments } = useQuery({
+    queryKey: ['appointments', dateRange.start, dateRange.end],
+    queryFn: () => fetchAppointments(dateRange.start, dateRange.end),
+    refetchInterval: 30000 // Refresh every 30 seconds
   })
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  // Fetch calendar data for month view
+  const { data: calendarData = [] } = useQuery({
+    queryKey: ['calendar', dateRange.month],
+    queryFn: () => fetchCalendarData(dateRange.month),
+    enabled: view === 'month'
+  })
+
+  // Fetch slots for day/week view
+  const { data: slots = [] } = useQuery({
+    queryKey: ['slots', dateRange.start, dateRange.end],
+    queryFn: () => fetchSlots(dateRange.start, dateRange.end),
+    enabled: view === 'day' || view === 'week'
+  })
+
+  // Create appointment mutation
+  const createMutation = useMutation({
+    mutationFn: createAppointment,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['calendar'] })
+      queryClient.invalidateQueries({ queryKey: ['slots'] })
+    }
+  })
+
+  // Navigation handlers
+  const goToPrevious = () => {
+    if (view === 'month') setCurrentDate(subMonths(currentDate, 1))
+    else if (view === 'week') setCurrentDate(subWeeks(currentDate, 1))
+    else setCurrentDate(subDays(currentDate, 1))
+  }
+
+  const goToNext = () => {
+    if (view === 'month') setCurrentDate(addMonths(currentDate, 1))
+    else if (view === 'week') setCurrentDate(addWeeks(currentDate, 1))
+    else setCurrentDate(addDays(currentDate, 1))
+  }
+
+  const goToToday = () => {
+    setCurrentDate(new Date())
+  }
+
+  // View title
+  const viewTitle = useMemo(() => {
+    if (view === 'month') {
+      return format(currentDate, 'MMMM yyyy')
+    } else if (view === 'week') {
+      const start = startOfWeek(currentDate, { weekStartsOn: 0 })
+      const end = endOfWeek(currentDate, { weekStartsOn: 0 })
+      return `${format(start, 'MMM d')} - ${format(end, 'MMM d, yyyy')}`
+    } else {
+      return format(currentDate, 'EEEE, MMMM d, yyyy')
+    }
+  }, [view, currentDate])
+
+  // Handle day click from month view
+  const handleDayClick = (date: Date) => {
+    setCurrentDate(date)
+    setView('day')
+  }
+
+  // Handle slot click for booking
+  const handleSlotClick = (slot: Slot, date?: Date) => {
+    setBookingModal({ slot, date: date || currentDate })
+  }
+
+  // Handle appointment click
+  const handleAppointmentClick = (appointment: Appointment) => {
+    // Could open a detail modal here in the future
+    console.log('Appointment clicked:', appointment)
+  }
+
+  // Handle booking submit
+  const handleBookingSubmit = async (data: BookingFormData) => {
+    await createMutation.mutateAsync(data)
+  }
 
   return (
     <div className="space-y-6">
@@ -68,119 +182,100 @@ function Appointments() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Appointments</h1>
           <p className="text-gray-500 mt-1">
-            View and manage booked appointments
+            Manage appointments and availability
           </p>
         </div>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => refetchAppointments()}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className="w-5 h-5 text-gray-500" />
+          </button>
+          <ViewToggle view={view} onViewChange={setView} />
+        </div>
       </div>
 
-      {/* Week Navigation */}
+      {/* Navigation */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <button
-            onClick={() => setCurrentDate(addDays(currentDate, -7))}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <h2 className="text-lg font-semibold">
-            {format(weekStart, 'MMMM d')} - {format(addDays(weekStart, 6), 'MMMM d, yyyy')}
-          </h2>
-          <button
-            onClick={() => setCurrentDate(addDays(currentDate, 7))}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goToPrevious}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              onClick={goToNext}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+            <button
+              onClick={goToToday}
+              className="px-3 py-1.5 text-sm font-medium text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+            >
+              Today
+            </button>
+          </div>
 
-        {/* Week Days */}
-        <div className="grid grid-cols-7 gap-2">
-          {weekDays.map((day) => {
-            const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
-            return (
-              <button
-                key={day.toISOString()}
-                onClick={() => setCurrentDate(day)}
-                className={clsx(
-                  'p-3 rounded-lg text-center transition-colors',
-                  isToday && 'bg-primary-600 text-white',
-                  !isToday && format(day, 'yyyy-MM-dd') === format(currentDate, 'yyyy-MM-dd') && 'bg-primary-50 text-primary-700',
-                  !isToday && format(day, 'yyyy-MM-dd') !== format(currentDate, 'yyyy-MM-dd') && 'hover:bg-gray-100'
-                )}
-              >
-                <div className="text-xs opacity-75">{format(day, 'EEE')}</div>
-                <div className="text-lg font-semibold">{format(day, 'd')}</div>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Appointments List */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-gray-900">
-            {format(currentDate, 'EEEE, MMMM d, yyyy')}
+            {viewTitle}
           </h2>
-          <span className="text-sm text-gray-500">
-            {appointments?.length || 0} appointments
-          </span>
+
+          <div className="text-sm text-gray-500">
+            {loadingAppointments ? (
+              'Loading...'
+            ) : (
+              `${appointments.length} appointment${appointments.length !== 1 ? 's' : ''}`
+            )}
+          </div>
         </div>
-
-        {appointments && appointments.length > 0 ? (
-          <div className="space-y-4">
-            {appointments.map((apt) => (
-              <div
-                key={apt.id}
-                className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg hover:border-primary-300 transition-colors"
-              >
-                {/* Time */}
-                <div className="w-20 text-center">
-                  <div className="text-lg font-semibold text-gray-900">
-                    {format(new Date(apt.appointment_time), 'HH:mm')}
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="w-px h-12 bg-gray-200" />
-
-                {/* Details */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-gray-400" />
-                    <span className="font-medium text-gray-900">
-                      {apt.patient_name}
-                    </span>
-                  </div>
-                  <div className="text-sm text-gray-500 mt-1">
-                    {apt.patient_phone}
-                  </div>
-                </div>
-
-                {/* Visit Type */}
-                <span className={clsx(
-                  'px-3 py-1 rounded-full text-sm font-medium',
-                  visitTypeColors[apt.visit_type]
-                )}>
-                  {visitTypeLabels[apt.visit_type]}
-                </span>
-
-                {/* Booked via AI badge */}
-                {apt.booked_via === 'ai' && (
-                  <span className="px-2 py-1 bg-accent-100 text-accent-700 rounded text-xs font-medium">
-                    AI Booked
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12 text-gray-500">
-            <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>No appointments for this day</p>
-          </div>
-        )}
       </div>
+
+      {/* Calendar Views */}
+      {view === 'month' && (
+        <MonthGrid
+          currentDate={currentDate}
+          calendarData={calendarData}
+          onDayClick={handleDayClick}
+        />
+      )}
+
+      {view === 'week' && (
+        <WeekView
+          currentDate={currentDate}
+          appointments={appointments}
+          slots={slots}
+          onSlotClick={handleSlotClick}
+          onAppointmentClick={handleAppointmentClick}
+        />
+      )}
+
+      {view === 'day' && (
+        <DayView
+          currentDate={currentDate}
+          appointments={appointments.filter(apt => {
+            const aptDate = format(new Date(apt.appointment_time), 'yyyy-MM-dd')
+            return aptDate === format(currentDate, 'yyyy-MM-dd')
+          })}
+          slots={slots}
+          onSlotClick={handleSlotClick}
+          onAppointmentClick={handleAppointmentClick}
+        />
+      )}
+
+      {/* Booking Modal */}
+      {bookingModal && (
+        <NewBookingModal
+          slot={bookingModal.slot}
+          date={bookingModal.date}
+          onClose={() => setBookingModal(null)}
+          onSubmit={handleBookingSubmit}
+        />
+      )}
     </div>
   )
 }

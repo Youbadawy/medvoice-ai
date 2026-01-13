@@ -54,22 +54,23 @@ class Settings(BaseSettings):
     # Clinic Configuration
     default_language: str = Field(default="fr", alias="DEFAULT_LANGUAGE")
     clinic_name: str = Field(
-        default="Clinique Medicale Saint-Laurent",
+        default="Clinique KaiMed",
         alias="CLINIC_NAME"
     )
     clinic_address: str = Field(
-        default="1234 Rue Saint-Laurent, Montreal QC",
+        default="Montreal, QC",
         alias="CLINIC_ADDRESS"
     )
     clinic_hours: str = Field(
-        default="Lundi-Vendredi 8h-17h, Samedi 9h-12h",
+        default="Lundi-Vendredi 9h-18h",
         alias="CLINIC_HOURS"
     )
 
     class Config:
-        env_file = "../.env"  # .env is in parent directory
+        env_file = ".env"  # Optional .env file for local development
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra env vars
 
 
 @lru_cache()

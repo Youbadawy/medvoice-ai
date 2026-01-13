@@ -59,12 +59,20 @@ BOOKING_TOOLS: List[Dict[str, Any]] = [
                         "enum": ["general", "followup", "vaccination"],
                         "description": "Type of visit"
                     },
+                    "ramq_number": {
+                        "type": "string",
+                        "description": "Health Insurance Number (RAMQ) - Optional. asking 'Do you have a RAMQ card?' is preferred."
+                    },
+                    "consent_given": {
+                        "type": "boolean",
+                        "description": "Whether the patient gave consent for Bill 25 data privacy"
+                    },
                     "notes": {
                         "type": "string",
-                        "description": "Optional notes about the appointment"
+                        "description": "Optional notes about the appointment (e.g. 'No RAMQ', 'Needs wheelchair', etc.)"
                     }
                 },
-                "required": ["slot_id", "patient_name", "patient_phone", "visit_type"]
+                "required": ["slot_id", "patient_name", "patient_phone", "visit_type", "consent_given"]
             }
         }
     },
@@ -180,68 +188,83 @@ BOOKING_TOOLS: List[Dict[str, Any]] = [
 # Helper function to format slots for speech
 def format_slots_for_speech(slots: List[Dict], language: str = "fr") -> str:
     """
-    Format available slots for text-to-speech.
+    Format available slots for natural, conversational speech.
 
     Args:
         slots: List of slot dictionaries with datetime, provider_name
         language: Language code
 
     Returns:
-        Formatted string for TTS
+        Formatted string for TTS - sounds natural, no lists
     """
     if not slots:
         if language == "fr":
-            return "Je suis désolé, il n'y a pas de disponibilités pour cette période. Voulez-vous essayer une autre date?"
+            return "Hmm, je ne vois pas de disponibilités pour cette période. On peut regarder une autre date si vous voulez?"
         else:
-            return "I'm sorry, there are no availabilities for this period. Would you like to try another date?"
+            return "Hmm, I'm not seeing any openings for that time. Would you like me to check a different date?"
 
-    # Take first 3 slots
+    # Take first 2-3 slots max for conversational delivery
     slots_to_show = slots[:3]
 
     if language == "fr":
-        intro = "Voici les prochaines disponibilités: "
-        slot_texts = []
-        for i, slot in enumerate(slots_to_show, 1):
-            # Format: "Premier, mardi le 15 janvier à 10h30"
-            ordinal = ["Premier", "Deuxième", "Troisième"][i-1]
-            slot_texts.append(f"{ordinal}, {slot.get('formatted_datetime', slot.get('datetime'))}")
-
-        return intro + ". ".join(slot_texts) + ". Lequel préférez-vous?"
+        if len(slots_to_show) == 1:
+            return f"J'ai {slots_to_show[0].get('formatted_datetime', slots_to_show[0].get('datetime'))} de disponible. Ça vous conviendrait?"
+        elif len(slots_to_show) == 2:
+            return (
+                f"On a {slots_to_show[0].get('formatted_datetime', slots_to_show[0].get('datetime'))} "
+                f"ou {slots_to_show[1].get('formatted_datetime', slots_to_show[1].get('datetime'))}. "
+                f"Lequel vous irait le mieux?"
+            )
+        else:
+            return (
+                f"On a {slots_to_show[0].get('formatted_datetime', slots_to_show[0].get('datetime'))}, "
+                f"{slots_to_show[1].get('formatted_datetime', slots_to_show[1].get('datetime'))}, "
+                f"ou {slots_to_show[2].get('formatted_datetime', slots_to_show[2].get('datetime'))}. "
+                f"Lequel vous conviendrait?"
+            )
 
     else:
-        intro = "Here are the next available slots: "
-        slot_texts = []
-        for i, slot in enumerate(slots_to_show, 1):
-            ordinal = ["First", "Second", "Third"][i-1]
-            slot_texts.append(f"{ordinal}, {slot.get('formatted_datetime', slot.get('datetime'))}")
-
-        return intro + ". ".join(slot_texts) + ". Which one would you prefer?"
+        if len(slots_to_show) == 1:
+            return f"I have {slots_to_show[0].get('formatted_datetime', slots_to_show[0].get('datetime'))} available. Would that work for you?"
+        elif len(slots_to_show) == 2:
+            return (
+                f"We have {slots_to_show[0].get('formatted_datetime', slots_to_show[0].get('datetime'))} "
+                f"or {slots_to_show[1].get('formatted_datetime', slots_to_show[1].get('datetime'))}. "
+                f"Which one works better for you?"
+            )
+        else:
+            return (
+                f"We have {slots_to_show[0].get('formatted_datetime', slots_to_show[0].get('datetime'))}, "
+                f"{slots_to_show[1].get('formatted_datetime', slots_to_show[1].get('datetime'))}, "
+                f"or {slots_to_show[2].get('formatted_datetime', slots_to_show[2].get('datetime'))}. "
+                f"Which one would you prefer?"
+            )
 
 
 def format_booking_confirmation(booking: Dict, language: str = "fr") -> str:
     """
-    Format booking confirmation for speech.
+    Format booking confirmation for natural, warm speech.
 
     Args:
         booking: Booking details dictionary
         language: Language code
 
     Returns:
-        Formatted confirmation string for TTS
+        Formatted confirmation string for TTS - warm and conversational
     """
     conf_num = booking.get("confirmation_number", "")
     datetime_str = booking.get("formatted_datetime", "")
-    patient_name = booking.get("patient_name", "")
+    patient_name = booking.get("patient_name", "").split()[0]  # Use first name only for warmth
 
     if language == "fr":
         return (
-            f"Parfait {patient_name}, votre rendez-vous est confirmé pour {datetime_str}. "
+            f"Excellent {patient_name}! C'est tout réservé pour {datetime_str}. "
             f"Votre numéro de confirmation est {conf_num}. "
-            "Vous recevrez un SMS de rappel. Y a-t-il autre chose que je peux faire pour vous?"
+            f"On vous enverra un petit rappel par texto. Est-ce qu'il y a autre chose que je peux faire pour vous?"
         )
     else:
         return (
-            f"Perfect {patient_name}, your appointment is confirmed for {datetime_str}. "
+            f"Wonderful {patient_name}! You're all set for {datetime_str}. "
             f"Your confirmation number is {conf_num}. "
-            "You'll receive an SMS reminder. Is there anything else I can help you with?"
+            f"We'll send you a reminder text. Is there anything else I can help you with today?"
         )

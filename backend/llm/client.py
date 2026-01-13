@@ -4,7 +4,7 @@ OpenRouter client for DeepSeek V3.2 and GPT-4o-mini fallback.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, AsyncIterator
 from openai import AsyncOpenAI
 
 from .prompts import SystemPrompts
@@ -47,22 +47,24 @@ class LLMClient:
         messages: List[Dict[str, str]],
         language: str = "fr",
         use_tools: bool = True,
-        use_fallback: bool = False
-    ) -> Dict[str, Any]:
+        use_fallback: bool = False,
+        stream: bool = False
+    ) -> Any:
         """
         Send a chat completion request.
-
+        
         Args:
             messages: Conversation history
             language: Current language ('fr' or 'en')
             use_tools: Whether to include function calling tools
             use_fallback: Whether to use fallback model
-
+            stream: Whether to stream response
+            
         Returns:
-            Dict with 'content' and optionally 'tool_calls'
+            Dict or AsyncGenerator
         """
         model = self.fallback_model if use_fallback else self.primary_model
-
+        
         try:
             # Build request
             request_params = {
@@ -70,8 +72,9 @@ class LLMClient:
                 "messages": messages,
                 "max_tokens": 500,
                 "temperature": 0.7,
+                "stream": stream
             }
-
+            
             # Add tools if enabled
             if use_tools:
                 request_params["tools"] = BOOKING_TOOLS
@@ -79,19 +82,21 @@ class LLMClient:
 
             # Make request
             response = await self.client.chat.completions.create(**request_params)
-
-            # Extract response
+            
+            if stream:
+                return response
+            
+            # Non-streaming handling
             choice = response.choices[0]
             message = choice.message
-
+            
             result = {
                 "content": message.content or "",
                 "tool_calls": None,
                 "model": model,
                 "finish_reason": choice.finish_reason
             }
-
-            # Check for tool calls
+            
             if message.tool_calls:
                 result["tool_calls"] = [
                     {
@@ -103,7 +108,7 @@ class LLMClient:
                     }
                     for tc in message.tool_calls
                 ]
-
+                
             logger.debug(f"LLM response ({model}): {result['content'][:100]}...")
             return result
 
@@ -117,16 +122,59 @@ class LLMClient:
                     messages=messages,
                     language=language,
                     use_tools=use_tools,
-                    use_fallback=True
+                    use_fallback=True,
+                    stream=stream
                 )
 
-            # Return error response
+            # Error handling for streaming
+            if stream:
+                async def error_gen():
+                    # Yield error message as a fake chunk-like structure
+                    yield self._get_error_message(language)
+                return error_gen()
+
+            # Error handling for non-streaming
             return {
                 "content": self._get_error_message(language),
                 "tool_calls": None,
                 "model": model,
                 "error": str(e)
             }
+
+    async def get_response_streaming(
+        self,
+        conversation_history: List[Dict[str, str]],
+        system_prompt: str,
+        language: str = "fr"
+    ) -> AsyncIterator[str]:
+        """
+        Get a conversational response with streaming for lower latency.
+
+        Args:
+            conversation_history: List of message dicts
+            system_prompt: System prompt to use
+            language: Current language
+
+        Yields:
+            String tokens as they arrive
+        """
+        # Build messages with system prompt
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(conversation_history)
+
+        # Stream response
+        # Stream response
+        stream_response = await self.chat(messages, language=language, stream=True)
+        
+        # Check if it's a generator (from fallback/error handling) or OpenAI response
+        if hasattr(stream_response, '__aiter__'):
+            async for chunk in stream_response:
+                yield chunk
+        else:
+            # OpenAI Stream object
+            async for chunk in stream_response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
 
     async def get_response(
         self,
@@ -162,11 +210,11 @@ class LLMClient:
         return result.get("content", "")
 
     def _get_error_message(self, language: str) -> str:
-        """Get error message in the appropriate language."""
+        """Get error message in the appropriate language - warm and apologetic."""
         if language == "fr":
-            return "Je suis désolé, j'ai un petit problème technique. Pouvez-vous répéter s'il vous plaît?"
+            return "Oups, pardon! J'ai eu un petit souci. Pouvez-vous me répéter ça?"
         else:
-            return "I'm sorry, I'm having a small technical issue. Could you please repeat that?"
+            return "Oops, sorry! I had a little hiccup there. Could you say that again for me?"
 
 
 class ConversationContext:

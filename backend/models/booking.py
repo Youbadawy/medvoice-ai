@@ -26,6 +26,9 @@ class BookingRequest(BaseModel):
     visit_type: Literal["general", "followup", "vaccination"] = "general"
     notes: Optional[str] = None
     call_sid: Optional[str] = None  # Reference to the originating call
+    # Canadian Market Compliance
+    ramq_number: Optional[str] = None  # Health Insurance Number (NAM)
+    consent_given: bool = False  # Bill 25 Data Privacy Consent
 
 
 class BookingConfirmation(BaseModel):

@@ -17,8 +17,11 @@ COPY . .
 # Create .env placeholder (will be overridden by Cloud Run env vars)
 RUN touch .env
 
-# Expose port
+# Expose port (Cloud Run uses PORT env var)
 EXPOSE 8080
 
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Set default port
+ENV PORT=8080
+
+# Run the application using shell form to allow env var expansion
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT
