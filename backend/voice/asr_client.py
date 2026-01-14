@@ -74,7 +74,7 @@ class DeepgramASRClient:
                 channels=1,
                 interim_results=True,
                 vad_events=True,
-                endpointing=3000,  # 3000ms to allow long pauses (prevent cutting off numbers)
+                endpointing=2500,  # 2500ms for faster response while still allowing pauses
                 smart_format=True, # Improved number formatting (514-123-4567)
             )
 

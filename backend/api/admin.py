@@ -880,7 +880,7 @@ async def get_appointment_details(booking_id: str):
         if call:
             response.call_duration = call.get("duration_seconds")
             response.call_recording_url = call.get("recording_url")
-            
+
         # Get Transcript
         transcript_data = await firebase.get_transcript(call_sid)
         response.call_transcript = [
@@ -891,5 +891,74 @@ async def get_appointment_details(booking_id: str):
             )
             for entry in transcript_data
         ]
-        
+
     return response
+
+
+# =====================
+# Voice Agent Settings
+# =====================
+
+class VoiceSettingsResponse(BaseModel):
+    """Voice agent settings response."""
+    voice_gender: str = "female"
+    emotion_level: str = "medium"
+    response_delay_ms: int = 2500
+    enabled: bool = True
+
+
+class VoiceSettingsUpdate(BaseModel):
+    """Voice agent settings update request."""
+    voice_gender: Optional[str] = None
+    emotion_level: Optional[str] = None
+    response_delay_ms: Optional[int] = None
+    enabled: Optional[bool] = None
+
+
+@router.get("/settings/voice", response_model=VoiceSettingsResponse)
+async def get_voice_settings():
+    """Get voice agent settings."""
+    firebase = get_firebase_client()
+    settings = await firebase.get_settings("voice_agent")
+
+    return VoiceSettingsResponse(
+        voice_gender=settings.get("voice_gender", "female"),
+        emotion_level=settings.get("emotion_level", "medium"),
+        response_delay_ms=settings.get("response_delay_ms", 2500),
+        enabled=settings.get("enabled", True)
+    )
+
+
+@router.put("/settings/voice", response_model=VoiceSettingsResponse)
+async def update_voice_settings(settings: VoiceSettingsUpdate):
+    """Update voice agent settings."""
+    firebase = get_firebase_client()
+
+    # Build update dict with only provided values
+    updates = {}
+    if settings.voice_gender is not None:
+        if settings.voice_gender not in ["female", "male"]:
+            raise HTTPException(status_code=400, detail="voice_gender must be 'female' or 'male'")
+        updates["voice_gender"] = settings.voice_gender
+    if settings.emotion_level is not None:
+        if settings.emotion_level not in ["low", "medium", "high"]:
+            raise HTTPException(status_code=400, detail="emotion_level must be 'low', 'medium', or 'high'")
+        updates["emotion_level"] = settings.emotion_level
+    if settings.response_delay_ms is not None:
+        if not 1000 <= settings.response_delay_ms <= 5000:
+            raise HTTPException(status_code=400, detail="response_delay_ms must be between 1000 and 5000")
+        updates["response_delay_ms"] = settings.response_delay_ms
+    if settings.enabled is not None:
+        updates["enabled"] = settings.enabled
+
+    if updates:
+        await firebase.update_settings("voice_agent", updates)
+
+    # Return current settings
+    current = await firebase.get_settings("voice_agent")
+    return VoiceSettingsResponse(
+        voice_gender=current.get("voice_gender", "female"),
+        emotion_level=current.get("emotion_level", "medium"),
+        response_delay_ms=current.get("response_delay_ms", 2500),
+        enabled=current.get("enabled", True)
+    )

@@ -523,31 +523,34 @@ class ConversationManager:
         self.slots["patient_phone"] = patient_phone
         self.slots["selected_slot"] = slot_id
 
-        # Mark booking as made
-        self.booking_made = True
-        self.state = ConversationState.ENDING
-
         logger.info(f"Booking confirmed: {booking.get('confirmation_number')}")
 
-        # Send SMS confirmation (fire and forget / async)
-        try:
-            from services.notification import get_notification_service
-            notification_service = get_notification_service()
-            
-            # Use formatted datetime if available, otherwise raw slot ID (not ideal but fallback)
-            appt_time_str = formatted_datetime or slot_id
-            
-            # Run in background to not block response
-            import asyncio
-            asyncio.create_task(notification_service.send_booking_confirmation(
-                patient_phone=patient_phone,
-                patient_name=patient_name,
-                appointment_time=appt_time_str,
-                confirmation_code=booking.get('confirmation_number', ''),
-                language=self.language
-            ))
-        except Exception as e:
-            logger.error(f"Failed to queue SMS confirmation: {e}")
+        # Send SMS confirmation only if not already sent (prevent duplicates)
+        if not self.booking_made:
+            self.booking_made = True
+            self.state = ConversationState.ENDING
+
+            try:
+                from services.notification import get_notification_service
+                notification_service = get_notification_service()
+
+                # Use formatted datetime if available, otherwise raw slot ID (not ideal but fallback)
+                appt_time_str = formatted_datetime or slot_id
+
+                # Run in background to not block response
+                import asyncio
+                asyncio.create_task(notification_service.send_booking_confirmation(
+                    patient_phone=patient_phone,
+                    patient_name=patient_name,
+                    appointment_time=appt_time_str,
+                    confirmation_code=booking.get('confirmation_number', ''),
+                    language=self.language
+                ))
+                logger.info(f"SMS confirmation queued for {patient_phone}")
+            except Exception as e:
+                logger.error(f"Failed to queue SMS confirmation: {e}")
+        else:
+            logger.warning("SMS confirmation already sent - skipping duplicate")
 
         return format_booking_confirmation(booking, self.language)
 

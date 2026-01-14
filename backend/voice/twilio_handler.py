@@ -284,8 +284,9 @@ class TwilioMediaStreamHandler:
                 # Queue audio for sending
                 await self.audio_queue.put(mulaw_base64)
 
-                # Add to transcript
+                # Track TTS characters for cost calculation
                 if self.conversation:
+                    self.conversation.total_tts_chars += len(text)
                     await self.conversation.add_assistant_message(text)
 
         except Exception as e:
@@ -352,11 +353,15 @@ class TwilioMediaStreamHandler:
 
             if audio_data:
                 mulaw_base64 = self.audio_converter.to_twilio_format(audio_data)
-                
+
                 # If valid audio, queue it
                 if mulaw_base64:
                     await self.audio_queue.put(mulaw_base64)
-                    
+
+                    # Track TTS characters for cost calculation
+                    if self.conversation:
+                        self.conversation.total_tts_chars += len(text)
+
         except Exception as e:
             logger.error(f"TTS chunk error: {e}")
 

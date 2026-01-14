@@ -410,6 +410,67 @@ class FirebaseClient:
         end_of_day = date.replace(hour=23, minute=59, second=59, microsecond=999999)
         return await self.get_appointments(start_of_day, end_of_day, status="confirmed")
 
+    # ====================
+    # Settings Management
+    # ====================
+
+    async def get_settings(self, settings_key: str = "voice_agent") -> Dict[str, Any]:
+        """
+        Get settings from Firestore.
+
+        Args:
+            settings_key: The settings document key (default: "voice_agent")
+
+        Returns:
+            Settings dictionary or default values
+        """
+        default_settings = {
+            "voice_gender": "female",
+            "emotion_level": "medium",
+            "response_delay_ms": 2500,
+            "enabled": True
+        }
+
+        if not self.db:
+            return default_settings
+
+        try:
+            settings_ref = self.db.collection("settings").document(settings_key)
+            doc = settings_ref.get()
+            if doc.exists:
+                return {**default_settings, **doc.to_dict()}
+            return default_settings
+        except Exception as e:
+            logger.error(f"Error getting settings: {e}")
+            return default_settings
+
+    async def update_settings(self, settings_key: str, updates: Dict[str, Any]) -> bool:
+        """
+        Update settings in Firestore.
+
+        Args:
+            settings_key: The settings document key
+            updates: Dictionary of settings to update
+
+        Returns:
+            True if successful
+        """
+        if not self.db:
+            logger.warning("Firebase not connected, skipping settings update")
+            return False
+
+        try:
+            settings_ref = self.db.collection("settings").document(settings_key)
+            settings_ref.set({
+                **updates,
+                "updated_at": firestore.SERVER_TIMESTAMP
+            }, merge=True)
+            logger.info(f"Settings updated: {settings_key}")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating settings: {e}")
+            return False
+
 
 # Singleton instance
 _firebase_client: Optional[FirebaseClient] = None

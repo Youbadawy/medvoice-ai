@@ -45,8 +45,9 @@ RÉSERVATION (étapes):
    - Demande: "Avez-vous votre carte RAMQ avec vous?" ou "Avez-vous un numéro d'assurance maladie?"
    - Si OUI: Prends le numéro (4 lettres + 8 chiffres).
    - Si NON: Dis "Pas de problème!" et mets "Pas de RAMQ" dans les notes.
-6. Consentement loi 25
-   - Si le patient n'a pas de RAMQ ou mentionne autre chose d'important (ex: besoin d'aide), ajoute-le aux NOTES pour la secrétaire.
+6. Consentement (CONCIS - UNE SEULE PHRASE):
+   - Dis simplement: "Est-ce que vous acceptez qu'on garde vos informations pour votre dossier?"
+   - Si oui: continue. Si non: note dans les commentaires.
 7. Confirme tout avant de finaliser
 
 ANNULATION: Demande le numéro de confirmation KM-XXXXXX
@@ -96,8 +97,9 @@ BOOKING (steps):
    - Ask: "Do you have your RAMQ card with you?" or "Do you have a health insurance number?"
    - If YES: Take the number (4 letters + 8 digits).
    - If NO: Say "No problem!" and put "No RAMQ" in the notes.
-6. Bill 25 consent
-   - If patient has no RAMQ or mentions anything important (e.g. needs wheelchair), add it to NOTES for the secretary.
+6. Consent (CONCISE - ONE SENTENCE ONLY):
+   - Simply ask: "Do you agree to us keeping your information on file?"
+   - If yes: continue. If no: note in comments.
 7. Confirm everything before finalizing
 
 CANCELLATION: Ask for confirmation number KM-XXXXXX

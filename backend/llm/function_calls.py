@@ -260,11 +260,11 @@ def format_booking_confirmation(booking: Dict, language: str = "fr") -> str:
         return (
             f"Excellent {patient_name}! C'est tout réservé pour {datetime_str}. "
             f"Votre numéro de confirmation est {conf_num}. "
-            f"On vous enverra un petit rappel par texto. Est-ce qu'il y a autre chose que je peux faire pour vous?"
+            f"Un SMS de confirmation vous a été envoyé. Merci d'avoir réservé avec KaiMed!"
         )
     else:
         return (
             f"Wonderful {patient_name}! You're all set for {datetime_str}. "
             f"Your confirmation number is {conf_num}. "
-            f"We'll send you a reminder text. Is there anything else I can help you with today?"
+            f"A confirmation SMS has been sent to you. Thank you for booking with KaiMed!"
         )
