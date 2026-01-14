@@ -145,7 +145,9 @@ class FirebaseClient:
                     "ended_at": data.get("ended_at"),
                     "duration_seconds": data.get("duration_seconds", 0),
                     "booking_made": data.get("booking_made", False),
-                    "transferred": data.get("transferred", False)
+                    "transferred": data.get("transferred", False),
+                    "cost_data": data.get("cost_data"),
+                    "usage_metrics": data.get("usage_metrics")
                 })
 
             return calls

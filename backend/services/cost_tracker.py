@@ -15,18 +15,21 @@ class CostService:
     RATES = {
         # Twilio Voice (Inbound/Outbound mix estimate) - per minute
         "twilio_voice_min": 0.014,
-        
+
         # Deepgram Nova-2 (Streaming) - per minute
         "deepgram_min": 0.0043,
-        
+
         # Google Cloud TTS (Journey/Premium) - per 1000 characters
-        "google_tts_1k_chars": 0.016, 
-        
+        "google_tts_1k_chars": 0.016,
+
+        # LLM - Gemini Flash (via OpenRouter) - per 1M tokens
+        "gemini_input_1m": 0.075,
+        "gemini_output_1m": 0.30,
+
         # LLM - DeepSeek V3 (Approximate) - per 1M tokens
-        # Note: Using high-end estimate to be safe
         "deepseek_input_1m": 0.14,
         "deepseek_output_1m": 0.28,
-        
+
         # LLM - GPT-4o-mini (Fallback) - per 1M tokens
         "gpt4omini_input_1m": 0.15,
         "gpt4omini_output_1m": 0.60,
@@ -67,11 +70,15 @@ class CostService:
         tts_cost = (tts_characters / 1000.0) * cls.RATES["google_tts_1k_chars"]
         
         # 3. Intelligence (Token-based)
-        is_gpt = "gpt" in model_name.lower()
-        if is_gpt:
+        model_lower = model_name.lower()
+        if "gpt" in model_lower:
             input_rate = cls.RATES["gpt4omini_input_1m"]
             output_rate = cls.RATES["gpt4omini_output_1m"]
+        elif "gemini" in model_lower:
+            input_rate = cls.RATES["gemini_input_1m"]
+            output_rate = cls.RATES["gemini_output_1m"]
         else:
+            # Default to DeepSeek rates
             input_rate = cls.RATES["deepseek_input_1m"]
             output_rate = cls.RATES["deepseek_output_1m"]
             

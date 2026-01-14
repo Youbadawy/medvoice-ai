@@ -611,14 +611,28 @@ class ConversationManager:
 
             # Calculate Costs
             from services.cost_tracker import CostService
-            
-            # Estimate tokens if not tracked perfectly (fallback)
+
+            # Estimate tokens from conversation history (streaming doesn't return usage)
             # Rough est: 1 token ~= 4 chars of text
-            if self.total_input_tokens == 0 and self.total_output_tokens == 0:
-                transcript_text = " ".join([m.get("text", "") for m in self.transcript])
-                est_tokens = len(transcript_text) / 4
-                self.total_input_tokens = int(est_tokens * 0.7)
-                self.total_output_tokens = int(est_tokens * 0.3)
+            # Always estimate for streaming since OpenRouter streaming doesn't return usage
+            if self.total_input_tokens < 50 or self.total_output_tokens < 50:
+                # Use full messages array for more accurate estimation
+                input_chars = 0
+                output_chars = 0
+
+                for msg in self.messages:
+                    content = msg.get("content", "")
+                    if isinstance(content, str):
+                        if msg.get("role") in ["user", "system"]:
+                            input_chars += len(content)
+                        elif msg.get("role") == "assistant":
+                            output_chars += len(content)
+
+                # Estimate: ~4 chars per token
+                self.total_input_tokens = max(self.total_input_tokens, int(input_chars / 4))
+                self.total_output_tokens = max(self.total_output_tokens, int(output_chars / 4))
+
+                logger.info(f"Token estimation: input={self.total_input_tokens}, output={self.total_output_tokens}")
 
             cost_data = CostService.calculate_call_cost(
                 duration_seconds=duration_seconds,
