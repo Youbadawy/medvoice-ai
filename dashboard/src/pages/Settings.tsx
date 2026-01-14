@@ -6,8 +6,7 @@ import {
   Bell,
   Save,
   AlertTriangle,
-  Mic,
-  Volume2
+  Mic
 } from 'lucide-react'
 import KillSwitch from '../components/KillSwitch'
 import { API_URL } from '../config'
