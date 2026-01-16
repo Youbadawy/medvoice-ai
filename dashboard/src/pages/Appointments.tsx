@@ -179,14 +179,14 @@ function Appointments() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Appointments</h1>
           <p className="text-gray-500 mt-1">
             Manage appointments and availability
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between sm:justify-end gap-4">
           <button
             onClick={() => refetchAppointments()}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -200,8 +200,8 @@ function Appointments() {
 
       {/* Navigation */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 order-2 sm:order-1">
             <button
               onClick={goToPrevious}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -222,11 +222,11 @@ function Appointments() {
             </button>
           </div>
 
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-gray-900 order-1 sm:order-2">
             {viewTitle}
           </h2>
 
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 order-3">
             {loadingAppointments ? (
               'Loading...'
             ) : (

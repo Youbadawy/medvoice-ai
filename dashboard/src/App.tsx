@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Routes, Route, NavLink } from 'react-router-dom'
+import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   Phone,
@@ -8,6 +8,8 @@ import {
   Settings,
   Plus,
   DollarSign,
+  Menu,
+  X,
 } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import Calls from './pages/Calls'
@@ -28,12 +30,45 @@ const navigation = [
 
 function App() {
   const queryClient = useQueryClient()
+  const location = useLocation()
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setIsSidebarOpen(false)
+  }, [location.pathname])
 
   return (
     <div className="min-h-screen bg-gray-50/50 font-sans text-gray-900">
+      {/* Mobile header */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-40 flex items-center justify-between px-4">
+        <div className="flex items-center gap-3">
+          <img src="/kaimed-logo.png" alt="KaiMed" className="w-8 h-8 rounded-lg" />
+          <span className="font-display font-bold text-lg">KaiMed AI</span>
+        </div>
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </header>
+
+      {/* Mobile overlay */}
+      {isSidebarOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="fixed inset-y-0 left-0 w-72 bg-white border-r border-gray-200 shadow-soft z-50">
+      <aside className={clsx(
+        "fixed inset-y-0 left-0 w-72 bg-white border-r border-gray-200 shadow-soft z-50 transition-transform duration-300 ease-in-out",
+        "lg:translate-x-0",
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
         {/* Logo */}
         <div className="flex items-center gap-4 px-8 py-6">
           <div className="relative">
@@ -108,8 +143,8 @@ function App() {
       </aside>
 
       {/* Main content */}
-      <main className="pl-72 transition-all duration-300 ease-in-out">
-        <div className="max-w-7xl mx-auto p-8 lg:p-10">
+      <main className="lg:pl-72 pt-16 lg:pt-0 transition-all duration-300 ease-in-out">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-10">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/calls" element={<Calls />} />
