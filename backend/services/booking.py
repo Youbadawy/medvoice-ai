@@ -333,7 +333,16 @@ class BookingService:
                     logger.info(f"Booking created in Firestore: {booking_id}")
                 except Exception as e:
                     logger.error(f"Firestore booking failed: {e}")
-                    # In production, we might want to raise here or handle gracefully
+                    # Return error to user so they know it didn't work
+                    return {
+                        "success": False,
+                        "error": "Booking system error. Please try again or call the clinic directly."
+                    }
+            else:
+                logger.warning("Booking service running in MOCK MODE - Booking NOT saved")
+                # Only return success in mock mode if it's explicitly intended (e.g. testing)
+                # But for now, we should probably warn or return a mock confirmation
+                # If this is production, this is bad.
             
             # 6. Return confirmation
             return {
