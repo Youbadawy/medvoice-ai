@@ -8,6 +8,7 @@ import json
 from typing import Optional, List, Dict, Any, AsyncIterator
 from datetime import datetime, timedelta
 from enum import Enum
+from zoneinfo import ZoneInfo
 
 from llm.client import LLMClient
 from llm.prompts import SystemPrompts
@@ -64,11 +65,11 @@ class ConversationManager:
         self.state = ConversationState.GREETING
         self.language = settings.default_language  # Default to French
 
-        # LLM client
+        # LLM client (Groq for ultra-fast inference)
         self.llm_client = LLMClient(
-            api_key=settings.openrouter_api_key,
-            primary_model=settings.openrouter_model_primary,
-            fallback_model=settings.openrouter_model_fallback
+            api_key=settings.groq_api_key,
+            primary_model=settings.groq_model_primary,
+            fallback_model=settings.groq_model_fallback
         )
 
         # Conversation history
@@ -191,10 +192,12 @@ class ConversationManager:
             return SystemPrompts.get_transfer_message(self.language)
 
         try:
-            # Inject emotion level into system prompt
+            # Inject emotion level and current time into system prompt
+            current_time = datetime.now(ZoneInfo("America/Montreal"))
             system_prompt = SystemPrompts.get_prompt(
                 language=self.language,
-                emotion_level=self.settings.emotion_level
+                emotion_level=self.settings.emotion_level,
+                current_time=current_time
             )
             response_data = await self.llm_client.get_response(
                 conversation_history=self.messages,
@@ -242,12 +245,13 @@ class ConversationManager:
             return
 
         # Stream LLM response
-        # Stream LLM response
         try:
-            # Inject emotion level into system prompt
+            # Inject emotion level and current time into system prompt
+            current_time = datetime.now(ZoneInfo("America/Montreal"))
             system_prompt = SystemPrompts.get_prompt(
                 language=self.language,
-                emotion_level=self.settings.emotion_level
+                emotion_level=self.settings.emotion_level,
+                current_time=current_time
             )
             
             tool_calls_buffer = [] 

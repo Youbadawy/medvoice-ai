@@ -257,9 +257,9 @@ class TwilioMediaStreamHandler:
         """Send initial greeting based on default language."""
         if self.conversation:
             # OPTIMIZATION: Small delay to ensure Twilio stream is ready
-            # This fixes the "silent greeting" issue where early audio is lost
-            await asyncio.sleep(0.5)
-            
+            # Reduced from 0.5s to 0.2s for faster response
+            await asyncio.sleep(0.2)
+
             greeting = self.conversation.get_greeting()
             await self._speak(greeting)
 

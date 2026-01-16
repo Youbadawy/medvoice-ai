@@ -40,8 +40,8 @@ class DeepgramASRClient:
         self.detected_language = "fr"  # Default to French for Quebec
         self._loop: Optional[asyncio.AbstractEventLoop] = None
 
-        # Language detection state
-        # CHANGED: Removed language_locked to support bilingual switching
+        # Language detection state - lock after first detection to prevent mid-call switching
+        self.language_locked = False
         self.utterance_count = 0
 
         # Silence timer fallback (for when UtteranceEnd doesn't fire)
@@ -65,7 +65,7 @@ class DeepgramASRClient:
 
             self.client = DeepgramClient(self.api_key)
 
-            # Configure for multilingual support
+            # Configure for multilingual support with reduced latency
             options = LiveOptions(
                 model="nova-2",
                 language="multi",  # Auto-detect language
@@ -74,7 +74,7 @@ class DeepgramASRClient:
                 channels=1,
                 interim_results=True,
                 vad_events=True,
-                endpointing=2500,  # 2500ms for faster response while still allowing pauses
+                endpointing=1500,  # 1500ms for faster response (reduced from 2500ms)
                 smart_format=True, # Improved number formatting (514-123-4567)
             )
 
@@ -296,9 +296,8 @@ class DeepgramASRClient:
             # Check if this is a final result
             is_final = getattr(result, 'is_final', True)
 
-            # Update language detection
-            # CHANGED: Allow fluid switching on every turn (no locking)
-            if is_final:
+            # Update language detection (only if not locked)
+            if is_final and not self.language_locked:
                 self._update_language(detected_lang)
 
             # Start silence timer on final transcript (fallback for UtteranceEnd)
@@ -342,7 +341,10 @@ class DeepgramASRClient:
         return 'fr' if french_matches > 0 else 'en'
 
     def _update_language(self, detected_lang: str):
-        """Update the detected language immediately (fluid switching)."""
-        if self.detected_language != detected_lang:
-            self.detected_language = detected_lang
-            logger.info(f"🌐 Language switched to: {detected_lang}")
+        """Update the detected language and lock it to prevent mid-call switching."""
+        if self.language_locked:
+            return  # Don't switch once locked
+
+        self.detected_language = detected_lang
+        self.language_locked = True  # Lock after first real detection
+        logger.info(f"🌐 Language locked to: {detected_lang}")

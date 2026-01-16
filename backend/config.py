@@ -27,8 +27,19 @@ class Settings(BaseSettings):
     # Google Cloud TTS (uses GOOGLE_APPLICATION_CREDENTIALS - no extra key needed)
     # TTS is authenticated via Firebase service account
 
-    # OpenRouter
-    openrouter_api_key: str = Field(..., alias="OPENROUTER_API_KEY")
+    # Groq (primary LLM provider - ultra-fast inference)
+    groq_api_key: str = Field(..., alias="GROQ_API_KEY")
+    groq_model_primary: str = Field(
+        default="meta-llama/llama-4-maverick-17b-128e-instruct",
+        alias="GROQ_MODEL_PRIMARY"
+    )
+    groq_model_fallback: str = Field(
+        default="meta-llama/llama-guard-4-12b",
+        alias="GROQ_MODEL_FALLBACK"
+    )
+
+    # OpenRouter (optional fallback)
+    openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
     openrouter_model_primary: str = Field(
         default="deepseek/deepseek-v3.2",
         alias="OPENROUTER_MODEL_PRIMARY"

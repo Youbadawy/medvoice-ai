@@ -339,10 +339,11 @@ class BookingService:
                         "error": "Booking system error. Please try again or call the clinic directly."
                     }
             else:
-                logger.warning("Booking service running in MOCK MODE - Booking NOT saved")
-                # Only return success in mock mode if it's explicitly intended (e.g. testing)
-                # But for now, we should probably warn or return a mock confirmation
-                # If this is production, this is bad.
+                logger.error("Booking attempted but Firebase is NOT connected. Booking NOT saved.")
+                return {
+                    "success": False,
+                    "error": "System maintenance: Database unavailable. Please call the clinic directly."
+                }
             
             # 6. Return confirmation
             return {

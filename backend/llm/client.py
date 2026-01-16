@@ -1,10 +1,12 @@
 """
 MedVoice AI - LLM Client
-OpenRouter client for DeepSeek V3.2 and GPT-4o-mini fallback.
+Groq client for ultra-fast inference with Llama models.
 """
 
 import logging
 from typing import List, Dict, Any, Optional, AsyncIterator
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from openai import AsyncOpenAI
 
 from .prompts import SystemPrompts
@@ -15,31 +17,27 @@ logger = logging.getLogger(__name__)
 
 class LLMClient:
     """
-    LLM client using OpenRouter for model access.
-    Primary: DeepSeek V3.2 (best value, enhanced tool-use)
-    Fallback: GPT-4o-mini (better French, proven reliability)
+    LLM client using Groq for ultra-fast inference.
+    Primary: Llama 3.3 70B (best quality)
+    Fallback: Llama 3.1 8B Instant (faster, lighter)
     """
 
-    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+    GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
     def __init__(
         self,
         api_key: str,
-        primary_model: str = "deepseek/deepseek-v3.2",
-        fallback_model: str = "openai/gpt-4o-mini"
+        primary_model: str = "meta-llama/llama-4-maverick-17b-128e-instruct",
+        fallback_model: str = "meta-llama/llama-guard-4-12b"
     ):
         self.api_key = api_key
         self.primary_model = primary_model
         self.fallback_model = fallback_model
 
-        # Initialize OpenAI client configured for OpenRouter
+        # Initialize OpenAI client configured for Groq
         self.client = AsyncOpenAI(
             api_key=api_key,
-            base_url=self.OPENROUTER_BASE_URL,
-            default_headers={
-                "HTTP-Referer": "https://medvoice-ai.web.app",
-                "X-Title": "MedVoice AI"
-            }
+            base_url=self.GROQ_BASE_URL
         )
 
     async def chat(

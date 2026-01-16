@@ -3,6 +3,10 @@ MedVoice AI - System Prompts
 Bilingual system prompts for French-Canadian and English conversations.
 """
 
+from datetime import datetime
+from typing import Optional
+import locale
+
 
 class SystemPrompts:
     """System prompts for the medical receptionist AI."""
@@ -110,10 +114,45 @@ SAFETY:
 - Patient wants human → Transfer politely
 """
 
+    # French day and month names for natural date formatting
+    FRENCH_DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+    FRENCH_MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin",
+                     "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+
     @classmethod
-    def get_prompt(cls, language: str = "fr", emotion_level: str = "medium") -> str:
-        """Get the system prompt with dynamic personality."""
-        
+    def _format_datetime_context(cls, current_time: datetime, language: str) -> str:
+        """Format current datetime as a context block for the LLM."""
+        if language == "fr":
+            day_name = cls.FRENCH_DAYS[current_time.weekday()]
+            month_name = cls.FRENCH_MONTHS[current_time.month - 1]
+            date_str = f"{day_name} {current_time.day} {month_name} {current_time.year}"
+            time_str = f"{current_time.hour}h{current_time.minute:02d}"
+            return f"""[CONTEXTE ACTUEL]
+Aujourd'hui: {date_str}
+Heure actuelle: {time_str}
+IMPORTANT: Utilise ces dates quand le patient dit "demain", "la semaine prochaine", etc.
+
+"""
+        else:
+            date_str = current_time.strftime("%A, %B %d, %Y")
+            time_str = current_time.strftime("%I:%M %p")
+            return f"""[CURRENT CONTEXT]
+Today: {date_str}
+Current time: {time_str}
+IMPORTANT: Use these dates when the patient says "tomorrow", "next week", etc.
+
+"""
+
+    @classmethod
+    def get_prompt(cls, language: str = "fr", emotion_level: str = "medium",
+                   current_time: Optional[datetime] = None) -> str:
+        """Get the system prompt with dynamic personality and current datetime context."""
+
+        # Build datetime context if provided
+        datetime_context = ""
+        if current_time:
+            datetime_context = cls._format_datetime_context(current_time, language)
+
         # Define personality traits based on emotion level
         personalities = {
             "low": {
@@ -152,7 +191,7 @@ SAFETY:
         traits = personalities.get(emotion_level, personalities["medium"]).get(language, personalities["medium"]["fr"])
 
         if language == "fr":
-            return cls.FRENCH_PROMPT.replace(
+            base_prompt = cls.FRENCH_PROMPT.replace(
                 """PERSONNALITÉ:
 - Chaleureux, joyeux, empathique. Tu adores aider les gens!
 - Utilise des phrases comme "Parfait!", "Super!", "Excellent!", "Avec plaisir!"
@@ -160,8 +199,9 @@ SAFETY:
 - Français québécois. Vouvoiement. Concis mais gentil.""",
                 f"{traits}\n- Français québécois. Vouvoiement. Concis mais gentil."
             )
+            return datetime_context + base_prompt
         else:
-            return cls.ENGLISH_PROMPT.replace(
+            base_prompt = cls.ENGLISH_PROMPT.replace(
                 """PERSONALITY:
 - Warm, joyful, empathetic. You genuinely love helping people!
 - Use phrases like "Perfect!", "Great!", "Absolutely!", "I'd be happy to help!"
@@ -169,6 +209,7 @@ SAFETY:
 - Professional but friendly. Concise but kind.""",
                 f"{traits}\n- Professional but friendly. Concise but kind."
             )
+            return datetime_context + base_prompt
 
     @classmethod
     def get_greeting(cls, language: str = "fr") -> str:
