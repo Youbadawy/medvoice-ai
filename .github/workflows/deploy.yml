@@ -44,6 +44,14 @@ jobs:
             --update-env-vars "GROQ_MODEL_PRIMARY=meta-llama/llama-4-maverick-17b-128e-instruct" \
             --update-env-vars "GROQ_MODEL_FALLBACK=meta-llama/llama-guard-4-12b" \
             --update-env-vars "DEFAULT_LANGUAGE=fr" \
+            --update-env-vars "PERSONAPLEX_ENABLED=true" \
+            --update-env-vars "PERSONAPLEX_API_KEY=${{ secrets.PERSONAPLEX_API_KEY }}" \
+            --update-env-vars "PERSONAPLEX_ENDPOINT=wss://personaplex.nvidia.com/v1/stream" \
+            --update-env-vars "PERSONAPLEX_VOICE_ID=fr-CA-SylvieNeural" \
+            --update-env-vars "PERSONAPLEX_ENABLE_BACKCHANNELS=true" \
+            --update-env-vars "PERSONAPLEX_ENABLE_INTERRUPTIONS=true" \
+            --update-env-vars "PERSONAPLEX_VAD_THRESHOLD=0.4" \
+            --update-env-vars "PERSONAPLEX_SILENCE_TIMEOUT_MS=800" \
             --min-instances 0 \
             --max-instances 10 \
             --memory 512Mi \

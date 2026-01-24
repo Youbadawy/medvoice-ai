@@ -52,6 +52,13 @@ gcloud run deploy $SERVICE_NAME \
     --update-env-vars "OPENROUTER_MODEL_FALLBACK=deepseek/deepseek-v3.2" \
     --update-env-vars "DEFAULT_LANGUAGE=fr" \
     --update-env-vars "CLINIC_NAME=Clinique Medicale Saint-Laurent" \
+    --update-env-vars "PERSONAPLEX_ENABLED=true" \
+    --update-env-vars "PERSONAPLEX_ENDPOINT=wss://personaplex.nvidia.com/v1/stream" \
+    --update-env-vars "PERSONAPLEX_VOICE_ID=fr-CA-SylvieNeural" \
+    --update-env-vars "PERSONAPLEX_ENABLE_BACKCHANNELS=true" \
+    --update-env-vars "PERSONAPLEX_ENABLE_INTERRUPTIONS=true" \
+    --update-env-vars "PERSONAPLEX_VAD_THRESHOLD=0.4" \
+    --update-env-vars "PERSONAPLEX_SILENCE_TIMEOUT_MS=800" \
     --min-instances 0 \
     --max-instances 10 \
     --memory 512Mi \
