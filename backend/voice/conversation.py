@@ -1,11 +1,13 @@
 """
 MedVoice AI - Conversation Manager
 State machine for managing voice conversations.
+Supports both traditional turn-based and PersonaPlex full-duplex modes.
 """
 
 import logging
 import json
-from typing import Optional, List, Dict, Any, AsyncIterator
+import asyncio
+from typing import Optional, List, Dict, Any, AsyncIterator, Callable
 from datetime import datetime, timedelta
 from enum import Enum
 from zoneinfo import ZoneInfo
@@ -36,10 +38,20 @@ class ConversationState(Enum):
     ENDING = "ending"
 
 
+class ConversationMode(Enum):
+    """Conversation mode - traditional turn-based or PersonaPlex full-duplex."""
+    TURN_BASED = "turn_based"
+    FULL_DUPLEX = "full_duplex"
+
+
 class ConversationManager:
     """
     Manages the conversation state and flow.
     Coordinates between ASR, LLM, and TTS components.
+
+    Supports two modes:
+    1. Turn-based (legacy): ASR -> LLM -> TTS pipeline
+    2. Full-duplex (PersonaPlex): Continuous bidirectional audio/text streaming
     """
 
     # Emergency keywords that trigger immediate transfer
@@ -65,14 +77,20 @@ class ConversationManager:
         self.state = ConversationState.GREETING
         self.language = settings.default_language  # Default to French
 
-        # LLM client (Groq for ultra-fast inference)
-        self.llm_client = LLMClient(
-            api_key=settings.groq_api_key,
-            primary_model=settings.groq_model_primary,
-            fallback_model=settings.groq_model_fallback
+        # Determine conversation mode
+        self.mode = (
+            ConversationMode.FULL_DUPLEX
+            if settings.personaplex_enabled and settings.personaplex_api_key
+            else ConversationMode.TURN_BASED
         )
 
-        # Conversation history
+        # Initialize appropriate client based on mode
+        if self.mode == ConversationMode.FULL_DUPLEX:
+            self._init_personaplex_client()
+        else:
+            self._init_turn_based_client()
+
+        # Conversation history (used for both modes)
         self.messages: List[Dict[str, str]] = []
         self.transcript: List[Dict[str, Any]] = []
 
@@ -100,7 +118,7 @@ class ConversationManager:
         # Track conversation metrics for status determination
         self.ai_response_count = 0
         self.caller_message_count = 0
-        
+
         # Usage metrics for cost tracking
         self.total_input_tokens = 0
         self.total_output_tokens = 0
@@ -109,10 +127,56 @@ class ConversationManager:
         # Prevent duplicate filler phrases during tool call chains
         self._filler_used_this_turn = False
 
-        logger.info(f"Conversation started: {call_sid}")
+        # Full-duplex specific state
+        self._duplex_session_active = False
+        self._emergency_triggered = False
+        self._audio_push_task: Optional[asyncio.Task] = None
+        self._event_loop_task: Optional[asyncio.Task] = None
+
+        logger.info(f"Conversation started: {call_sid} (mode: {self.mode.value})")
 
         # Create call record in Firestore
         self._create_call_record()
+
+    def _init_turn_based_client(self):
+        """Initialize the traditional turn-based LLM client."""
+        self.llm_client = LLMClient(
+            api_key=self.settings.groq_api_key,
+            primary_model=self.settings.groq_model_primary,
+            fallback_model=self.settings.groq_model_fallback
+        )
+        self.personaplex_client = None
+
+    def _init_personaplex_client(self):
+        """Initialize the PersonaPlex full-duplex client."""
+        from llm.personaplex_client import (
+            PersonaPlexClient,
+            PersonaPlexConfig
+        )
+
+        # Build PersonaPlex config from settings
+        config = PersonaPlexConfig(
+            endpoint_url=self.settings.personaplex_endpoint,
+            api_key=self.settings.personaplex_api_key,
+            voice_id=self.settings.personaplex_voice_id,
+            voice_embedding_path=self.settings.personaplex_voice_embedding_path,
+            enable_backchannels=self.settings.personaplex_enable_backchannels,
+            enable_interruptions=self.settings.personaplex_enable_interruptions,
+            vad_threshold=self.settings.personaplex_vad_threshold,
+            silence_timeout_ms=self.settings.personaplex_silence_timeout_ms,
+            primary_language="fr-CA" if self.language == "fr" else "en-US",
+            secondary_language="en-US" if self.language == "fr" else "fr-CA",
+            auto_language_switch=True
+        )
+
+        self.personaplex_client = PersonaPlexClient(config)
+
+        # Also keep turn-based client as fallback
+        self.llm_client = LLMClient(
+            api_key=self.settings.groq_api_key,
+            primary_model=self.settings.groq_model_primary,
+            fallback_model=self.settings.groq_model_fallback
+        )
 
     def update_language(self, detected_language: str):
         """Update the conversation language dynamically."""
@@ -123,6 +187,274 @@ class ConversationManager:
     def get_greeting(self) -> str:
         """Get the initial greeting in the appropriate language."""
         return SystemPrompts.get_greeting(self.language)
+
+    # ==================== FULL-DUPLEX MODE (PersonaPlex) ====================
+
+    async def start_duplex_session(
+        self,
+        on_audio_output: Callable[[bytes], None],
+        on_agent_text: Optional[Callable[[str], None]] = None
+    ) -> None:
+        """
+        Start a full-duplex PersonaPlex session.
+
+        This replaces the traditional get_response() turn-based pattern.
+        Audio flows continuously in both directions.
+
+        Args:
+            on_audio_output: Callback to handle agent audio chunks (play to user)
+            on_agent_text: Optional callback for agent text (for logging/display)
+        """
+        if self.mode != ConversationMode.FULL_DUPLEX:
+            raise RuntimeError("Full-duplex mode not enabled")
+
+        if not self.personaplex_client:
+            raise RuntimeError("PersonaPlex client not initialized")
+
+        logger.info(f"Starting full-duplex session for call {self.call_sid}")
+
+        # Build system prompt with current context
+        current_time = datetime.now(ZoneInfo("America/Montreal"))
+        system_prompt = SystemPrompts.get_prompt(
+            language=self.language,
+            emotion_level=self.settings.emotion_level,
+            current_time=current_time
+        )
+
+        # Start PersonaPlex session
+        await self.personaplex_client.start_session(
+            system_prompt=system_prompt,
+            tool_handler=self._personaplex_tool_handler,
+            on_emergency=self._handle_emergency_callback
+        )
+
+        self._duplex_session_active = True
+
+        # Start the event processing loop
+        self._event_loop_task = asyncio.create_task(
+            self._process_personaplex_events(on_audio_output, on_agent_text)
+        )
+
+        logger.info("Full-duplex session started")
+
+    async def push_audio(self, audio_chunk: bytes) -> None:
+        """
+        Push audio from the user's microphone to PersonaPlex.
+
+        This should be called continuously as audio is captured.
+
+        Args:
+            audio_chunk: Raw PCM audio bytes
+        """
+        if not self._duplex_session_active:
+            logger.warning("Attempted to push audio without active duplex session")
+            return
+
+        # Check for emergency keywords in any partial transcript
+        # (PersonaPlex handles this via events, but we add a safety layer)
+        await self.personaplex_client.push_audio(audio_chunk)
+
+    async def _process_personaplex_events(
+        self,
+        on_audio_output: Callable[[bytes], None],
+        on_agent_text: Optional[Callable[[str], None]]
+    ) -> None:
+        """
+        Process events from the PersonaPlex stream.
+
+        This runs as a background task and handles:
+        - Audio output (forwarded to playback)
+        - Transcripts (logged to Firebase)
+        - Tool calls (executed and results returned)
+        - Emergency interruptions
+        """
+        from llm.personaplex_client import PersonaPlexEvent
+
+        try:
+            async for event in self.personaplex_client.events():
+                if self._emergency_triggered:
+                    # Stop processing if emergency was triggered
+                    break
+
+                if event.event_type == PersonaPlexEvent.AUDIO_CHUNK:
+                    # Forward audio to playback callback
+                    if on_audio_output:
+                        on_audio_output(event.data)
+
+                elif event.event_type == PersonaPlexEvent.TRANSCRIPT_FINAL:
+                    # User finished speaking - log and check for emergencies
+                    user_text = event.data.get("text", "")
+                    await self._handle_user_transcript(user_text)
+
+                elif event.event_type == PersonaPlexEvent.AGENT_TEXT:
+                    # Agent text output
+                    agent_text = event.data.get("text", "")
+                    if agent_text.strip():
+                        self.ai_response_count += 1
+                        if on_agent_text:
+                            on_agent_text(agent_text)
+
+                elif event.event_type == PersonaPlexEvent.TOOL_CALL:
+                    # Tool call was executed (handled by _personaplex_tool_handler)
+                    logger.info(f"Tool call processed: {event.data.tool_name}")
+
+                elif event.event_type == PersonaPlexEvent.TURN_END:
+                    # Agent finished speaking - save accumulated transcript
+                    await self._save_agent_turn()
+
+                elif event.event_type == PersonaPlexEvent.INTERRUPTION:
+                    logger.info("User interrupted agent")
+
+                elif event.event_type == PersonaPlexEvent.ERROR:
+                    logger.error(f"PersonaPlex error: {event.data}")
+                    # Could fall back to turn-based mode here
+
+        except asyncio.CancelledError:
+            logger.info("Event processing cancelled")
+        except Exception as e:
+            logger.error(f"Error processing PersonaPlex events: {e}")
+
+    async def _handle_user_transcript(self, text: str) -> None:
+        """Handle a finalized user transcript from PersonaPlex."""
+        self.caller_message_count += 1
+
+        # Log to transcript
+        entry = {
+            "speaker": "caller",
+            "text": text,
+            "timestamp": datetime.utcnow().isoformat(),
+            "language": self.language
+        }
+        self.transcript.append(entry)
+        self.messages.append({"role": "user", "content": text})
+
+        # Save to Firebase
+        await self._save_transcript_entry(entry)
+
+        # Check for emergency keywords
+        if self._is_emergency(text.lower()):
+            await self._trigger_emergency_interrupt(text)
+
+        # Check for transfer request
+        if self._wants_transfer(text.lower()):
+            self.state = ConversationState.TRANSFERRING
+            # PersonaPlex will handle the response
+
+    async def _save_agent_turn(self) -> None:
+        """Save the agent's completed turn to transcript."""
+        # Get accumulated transcript from PersonaPlex
+        transcript_entries = self.personaplex_client.get_transcript()
+
+        for entry in transcript_entries:
+            if entry.get("speaker") == "agent" and entry not in self.transcript:
+                self.transcript.append(entry)
+                self.messages.append({
+                    "role": "assistant",
+                    "content": entry.get("text", "")
+                })
+                await self._save_transcript_entry(entry)
+
+    async def _personaplex_tool_handler(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any]
+    ) -> str:
+        """
+        Handle tool calls from PersonaPlex.
+
+        This is the bridge between PersonaPlex's tool detection and our
+        existing tool execution logic.
+
+        Args:
+            tool_name: Name of the tool to execute
+            arguments: Tool arguments
+
+        Returns:
+            Tool execution result as string
+        """
+        logger.info(f"PersonaPlex tool call: {tool_name}")
+
+        try:
+            result = await self.handle_tool_call(tool_name, arguments)
+            return result
+        except Exception as e:
+            logger.error(f"Tool execution failed: {e}")
+            return json.dumps({"error": str(e)})
+
+    def _handle_emergency_callback(self, emergency_text: str) -> None:
+        """Callback when PersonaPlex detects emergency (or we trigger it)."""
+        logger.warning(f"Emergency callback triggered: {emergency_text}")
+        self._emergency_triggered = True
+
+    async def _trigger_emergency_interrupt(self, detected_text: str) -> None:
+        """
+        Trigger emergency interrupt - stop agent and inject emergency message.
+
+        This immediately interrupts any ongoing agent speech and injects
+        the emergency message to be spoken.
+        """
+        logger.warning(f"Emergency detected: {detected_text}")
+        self._emergency_triggered = True
+
+        if self.personaplex_client and self._duplex_session_active:
+            # Interrupt the agent
+            await self.personaplex_client.trigger_emergency_interrupt(detected_text)
+
+            # Inject the emergency message
+            emergency_message = SystemPrompts.get_emergency_message(self.language)
+            await self.personaplex_client.inject_text(emergency_message)
+
+            # Log to transcript
+            entry = {
+                "speaker": "system",
+                "text": f"EMERGENCY DETECTED: {detected_text}",
+                "timestamp": datetime.utcnow().isoformat(),
+                "emergency": True
+            }
+            self.transcript.append(entry)
+            await self._save_transcript_entry(entry)
+
+    async def end_duplex_session(self) -> Dict[str, Any]:
+        """
+        End the full-duplex session gracefully.
+
+        Returns:
+            Session summary with metrics
+        """
+        if not self._duplex_session_active:
+            return {}
+
+        logger.info(f"Ending full-duplex session for call {self.call_sid}")
+
+        self._duplex_session_active = False
+
+        # Cancel event loop task
+        if self._event_loop_task:
+            self._event_loop_task.cancel()
+            try:
+                await self._event_loop_task
+            except asyncio.CancelledError:
+                pass
+
+        # End PersonaPlex session
+        if self.personaplex_client:
+            session_summary = await self.personaplex_client.end_session()
+
+            # Merge any remaining transcript entries
+            for entry in session_summary.get("transcript", []):
+                if entry not in self.transcript:
+                    self.transcript.append(entry)
+
+        # Save final transcript
+        await self.save_transcript()
+
+        return {
+            "mode": "full_duplex",
+            "duration_seconds": int((datetime.utcnow() - self.start_time).total_seconds()),
+            "emergency_triggered": self._emergency_triggered
+        }
+
+    # ==================== TURN-BASED MODE (Legacy) ====================
 
     async def add_caller_message(self, text: str):
         """Add a caller message to the transcript and save immediately."""
@@ -173,10 +505,15 @@ class ConversationManager:
     async def get_response(self) -> Optional[str]:
         """
         Get the AI response based on current state and last message.
+        (Turn-based mode only)
 
         Returns:
             Response text to speak, or None if no response needed
         """
+        if self.mode == ConversationMode.FULL_DUPLEX:
+            logger.warning("get_response() called in full-duplex mode - use start_duplex_session() instead")
+            return None
+
         if not self.messages:
             return None
 
@@ -224,10 +561,15 @@ class ConversationManager:
     async def get_response_streaming(self) -> AsyncIterator[str]:
         """
         Get AI response with streaming for lower latency.
+        (Turn-based mode - DEPRECATED in favor of full-duplex)
 
         Yields:
             String tokens as they arrive from LLM
         """
+        if self.mode == ConversationMode.FULL_DUPLEX:
+            logger.warning("get_response_streaming() is deprecated in full-duplex mode")
+            return
+
         if not self.messages:
             return
 
@@ -253,9 +595,9 @@ class ConversationManager:
                 emotion_level=self.settings.emotion_level,
                 current_time=current_time
             )
-            
-            tool_calls_buffer = [] 
-            
+
+            tool_calls_buffer = []
+
             async for chunk in self.llm_client.get_response_streaming(
                 conversation_history=self.messages,
                 system_prompt=system_prompt,
@@ -264,24 +606,24 @@ class ConversationManager:
                 # Handle OpenAI chunk object
                 if not hasattr(chunk, 'choices') or not chunk.choices:
                     continue
-                    
+
                 delta = chunk.choices[0].delta
-                
+
                 # 1. Handle Content
                 if delta.content:
                     yield delta.content
-                    
+
                 # 2. Handle Tool Calls
                 if delta.tool_calls:
                     for tc in delta.tool_calls:
                         if len(tool_calls_buffer) <= tc.index:
                              tool_calls_buffer.append({"id": "", "function": {"name": "", "arguments": ""}})
-                        
+
                         existing = tool_calls_buffer[tc.index]
-                        
+
                         if tc.id:
                             existing["id"] = tc.id
-                        
+
                         if tc.function:
                             if tc.function.name:
                                 existing["function"]["name"] += tc.function.name
@@ -289,7 +631,7 @@ class ConversationManager:
                                 existing["function"]["arguments"] += tc.function.arguments
 
             self.ai_response_count += 1
-            
+
             # Process tool calls if any
             if tool_calls_buffer:
                 logger.info(f"🛠️ Processing {len(tool_calls_buffer)} tool calls from stream")
@@ -304,14 +646,14 @@ class ConversationManager:
                 for tool_call in tool_calls_buffer:
                     func_name = tool_call["function"]["name"]
                     func_args_str = tool_call["function"]["arguments"]
-                    
+
                     try:
                         func_args = json.loads(func_args_str)
                         logger.info(f"🛠️ Executing tool: {func_name} args: {func_args}")
-                        
+
                         # Execute tool
                         tool_result = await self.handle_tool_call(func_name, func_args)
-                        
+
                         # Add tool interaction to history
                         self.messages.append({
                             "role": "assistant",
@@ -326,19 +668,17 @@ class ConversationManager:
                                 }
                             ]
                         })
-                        
+
                         self.messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call["id"],
                             "content": tool_result
                         })
-                        
+
                         # Recursively get new response (streaming)
-                        # The system prompt is regenerated in the next call, so it will pick up the settings.
-                        # We yield the result of the new stream
                         async for token in self.get_response_streaming():
                             yield token
-                            
+
                     except json.JSONDecodeError:
                         logger.error(f"❌ Failed to parse arguments for tool {func_name}")
                     except Exception as e:
@@ -347,6 +687,8 @@ class ConversationManager:
         except Exception as e:
             logger.error(f"Error streaming response: {e}")
             yield self._get_error_response()
+
+    # ==================== SHARED FUNCTIONALITY ====================
 
     def _is_emergency(self, text: str) -> bool:
         """Check if the message contains emergency keywords."""
@@ -428,7 +770,7 @@ class ConversationManager:
 
     async def handle_tool_call(self, tool_name: str, arguments: Dict) -> str:
         """
-        Handle a tool call from the LLM.
+        Handle a tool call from the LLM (works for both modes).
 
         Args:
             tool_name: Name of the tool to execute
@@ -496,8 +838,6 @@ class ConversationManager:
             clean_ramq = re.sub(r'[\s-]', '', ramq_number).upper()
             if not re.match(r'^[A-Z]{4}\d{8}$', clean_ramq):
                  logger.warning(f"Invalid RAMQ format: {ramq_number}")
-                 # You might want to ask the user to repeat, but for MVP we log it.
-                 # In a real system, we'd return a tool error or ask again.
 
         # Get formatted datetime from available slots
         formatted_datetime = ""
@@ -538,11 +878,10 @@ class ConversationManager:
                 from services.notification import get_notification_service
                 notification_service = get_notification_service()
 
-                # Use formatted datetime if available, otherwise raw slot ID (not ideal but fallback)
+                # Use formatted datetime if available
                 appt_time_str = formatted_datetime or slot_id
 
                 # Run in background to not block response
-                import asyncio
                 asyncio.create_task(notification_service.send_booking_confirmation(
                     patient_phone=patient_phone,
                     patient_name=patient_name,
@@ -585,13 +924,13 @@ class ConversationManager:
     def _create_call_record(self):
         """Create initial call record in Firestore."""
         try:
-            import asyncio
             call_data = {
                 "call_sid": self.call_sid,
                 "caller_number": self.caller_number,
                 "language": self.language,
                 "status": "active",
-                "started_at": self.start_time.isoformat()
+                "started_at": self.start_time.isoformat(),
+                "mode": self.mode.value  # Track conversation mode
             }
             # Run async in sync context
             loop = asyncio.get_event_loop()
@@ -617,10 +956,7 @@ class ConversationManager:
             from services.cost_tracker import CostService
 
             # Estimate tokens from conversation history (streaming doesn't return usage)
-            # Rough est: 1 token ~= 4 chars of text
-            # Always estimate for streaming since OpenRouter streaming doesn't return usage
             if self.total_input_tokens < 50 or self.total_output_tokens < 50:
-                # Use full messages array for more accurate estimation
                 input_chars = 0
                 output_chars = 0
 
@@ -655,7 +991,9 @@ class ConversationManager:
                 "ended_at": end_time.isoformat(),
                 "ai_response_count": self.ai_response_count,
                 "caller_message_count": self.caller_message_count,
-                "cost_data": cost_data,  # Save cost data
+                "mode": self.mode.value,
+                "emergency_triggered": self._emergency_triggered,
+                "cost_data": cost_data,
                 "usage_metrics": {
                     "tts_chars": self.total_tts_chars,
                     "input_tokens": self.total_input_tokens,

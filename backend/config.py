@@ -81,6 +81,27 @@ class Settings(BaseSettings):
     voice_gender: str = Field(default="female", alias="VOICE_GENDER")  # 'male' or 'female'
     emotion_level: str = Field(default="medium", alias="EMOTION_LEVEL") # 'low', 'medium', 'high'
 
+    # PersonaPlex (NVIDIA full-duplex conversational AI)
+    personaplex_enabled: bool = Field(default=False, alias="PERSONAPLEX_ENABLED")
+    personaplex_api_key: Optional[str] = Field(default=None, alias="PERSONAPLEX_API_KEY")
+    personaplex_endpoint: str = Field(
+        default="wss://personaplex.nvidia.com/v1/stream",
+        alias="PERSONAPLEX_ENDPOINT"
+    )
+    personaplex_voice_id: str = Field(
+        default="fr-CA-SylvieNeural",
+        alias="PERSONAPLEX_VOICE_ID"
+    )
+    personaplex_voice_embedding_path: Optional[str] = Field(
+        default=None,
+        alias="PERSONAPLEX_VOICE_EMBEDDING_PATH"
+    )
+    # PersonaPlex behavior settings
+    personaplex_enable_backchannels: bool = Field(default=True, alias="PERSONAPLEX_ENABLE_BACKCHANNELS")
+    personaplex_enable_interruptions: bool = Field(default=True, alias="PERSONAPLEX_ENABLE_INTERRUPTIONS")
+    personaplex_vad_threshold: float = Field(default=0.4, alias="PERSONAPLEX_VAD_THRESHOLD")
+    personaplex_silence_timeout_ms: int = Field(default=800, alias="PERSONAPLEX_SILENCE_TIMEOUT_MS")
+
     class Config:
         env_file = ".env"  # Optional .env file for local development
         env_file_encoding = "utf-8"
